@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import * as pdf from "pdf-parse";
+import { PDFParse } from "pdf-parse";
 
 const client = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY,
@@ -24,8 +24,11 @@ export async function POST(req: Request) {
 
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
-      const parsedPdf = await pdf(buffer);
+
+      const parser = new PDFParse({ data: buffer });
+      const parsedPdf = await parser.getText();
       text = parsedPdf.text || "";
+      await parser.destroy();
     }
 
     if (!text || !text.trim()) {
