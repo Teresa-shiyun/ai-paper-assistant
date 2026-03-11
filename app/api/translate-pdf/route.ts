@@ -32,11 +32,17 @@ function cleanText(markdown: string) {
 }
 
 async function uploadPdfToMistral(fileBuffer: Buffer, filename: string) {
+  const uint8 = new Uint8Array(fileBuffer);
+  const arrayBuffer = uint8.buffer.slice(
+    uint8.byteOffset,
+    uint8.byteOffset + uint8.byteLength
+  ) as ArrayBuffer;
+
   const form = new FormData();
   form.append("purpose", "ocr");
   form.append(
     "file",
-    new Blob([fileBuffer], { type: "application/pdf" }),
+    new Blob([arrayBuffer], { type: "application/pdf" }),
     filename
   );
 
