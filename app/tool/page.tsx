@@ -129,27 +129,47 @@ function getTodayKey() {
 }
 
 async function extractPDFText(file: File) {
-  const pdfjsLib = await import("pdfjs-dist");
+  try {
+    const pdfjsLib = await import("pdfjs-dist");
 
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-  let fullText = "";
+    let fullText = "";
 
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
 
-    const strings = content.items
-      .map((item: any) => ("str" in item ? item.str : ""))
-      .filter(Boolean);
+      const strings = content.items
+        .map((item: any) => ("str" in item ? item.str : ""))
+        .filter(Boolean);
 
-    fullText += strings.join(" ") + "\n";
+      fullText += strings.join(" ") + "\n";
+    }
+
+    if (fullText.trim().length > 100) {
+      return fullText;
+    }
+
+    throw new Error("PDF text layer empty");
+  } catch {
+    // OCR fallback
+    const Tesseract = await import("tesseract.js");
+
+    const worker = await Tesseract.createWorker("eng");
+
+    const image = URL.createObjectURL(file);
+
+    const {
+      data: { text },
+    } = await worker.recognize(image);
+
+    await worker.terminate();
+
+    return text;
   }
-
-  return fullText;
 }
-
 export default function ToolPage() {
   const [lang, setLang] = useState<"en" | "zh">("en");
   const [text, setText] = useState("");
