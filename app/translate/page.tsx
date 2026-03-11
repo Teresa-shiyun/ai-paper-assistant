@@ -1,38 +1,163 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+type PageItem = {
+  page: number;
+  original: string;
+  zh: string;
+};
+
+type TranslatePdfResult = {
+  totalPages: number;
+  pages: PageItem[];
+};
+
+const DAILY_LIMIT = 2;
+
+const labels = {
+  en: {
+    title: "AI PDF Translator",
+    subtitle:
+      "Upload PDF or paste academic text to get side-by-side translation.",
+    uploadPdf: "Upload PDF",
+    placeholder: "Paste academic text here",
+    translate: "Translate",
+    working: "AI working...",
+    useSample: "Use Sample",
+    clear: "Clear",
+    langBtn: "中文",
+    remaining: "Remaining today",
+    freeTrial: "Free Trial: 2 AI uses per day",
+    chars: "Characters",
+    pdfSelected: "PDF selected",
+    noFile: "Please upload a PDF first.",
+    freeUsed: "Free trial used. Upgrade to Pro for unlimited access.",
+    invalid: "Server returned an invalid response. Please try again.",
+    original: "Original PDF",
+    translated: "Translated",
+    summaryZh: "Chinese Summary",
+    keywords: "Keywords",
+    summaryPlaceholder: "Chinese summary will appear here",
+    parallelPlaceholder: "Parallel translation will appear here",
+    page: "Page",
+    prev: "Previous",
+    next: "Next",
+  },
+  zh: {
+    title: "AI 文档翻译",
+    subtitle: "上传 PDF，获得左右对照翻译。",
+    uploadPdf: "上传 PDF",
+    placeholder: "请在这里粘贴学术文本",
+    translate: "开始翻译",
+    working: "AI 正在处理中...",
+    useSample: "使用示例",
+    clear: "清空",
+    langBtn: "EN",
+    remaining: "今日剩余",
+    freeTrial: "免费试用：每天 2 次 AI 使用机会",
+    chars: "字符数",
+    pdfSelected: "已选择 PDF",
+    noFile: "请先上传 PDF。",
+    freeUsed: "今日免费次数已用完，升级 Pro 可无限使用。",
+    invalid: "服务器返回异常，请稍后再试。",
+    original: "原始 PDF",
+    translated: "翻译",
+    summaryZh: "中文总结",
+    keywords: "关键词",
+    summaryPlaceholder: "这里会显示中文总结",
+    parallelPlaceholder: "这里会显示左右对照翻译",
+    page: "第",
+    prev: "上一页",
+    next: "下一页",
+  },
+};
+
+function getTodayKey() {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const dd = String(today.getDate()).padStart(2, "0");
+  return `translate_pdf_usage_${yyyy}-${mm}-${dd}`;
+}
 
 export default function TranslatePage() {
+  const [lang, setLang] = useState<"en" | "zh">("zh");
   const [file, setFile] = useState<File | null>(null);
+  const [fileKey, setFileKey] = useState("");
+  const [result, setResult] = useState<TranslatePdfResult | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [usageCount, setUsageCount] = useState(0);
   const [error, setError] = useState("");
-  const [translation, setTranslation] = useState("");
-  const [pdfUrl, setPdfUrl] = useState("");
 
-  const handleTranslate = async () => {
+  const t = labels[lang];
+
+  useEffect(() => {
+    const savedLang = localStorage.getItem("ui_lang");
+    if (savedLang === "en" || savedLang === "zh") setLang(savedLang);
+
+    const savedUsage = localStorage.getItem(getTodayKey());
+    setUsageCount(savedUsage ? Number(savedUsage) : 0);
+  }, []);
+
+  function toggleLang() {
+    const next = lang === "en" ? "zh" : "en";
+    setLang(next);
+    localStorage.setItem("ui_lang", next);
+  }
+
+  function updateUsage(newCount: number) {
+    localStorage.setItem(getTodayKey(), String(newCount));
+    setUsageCount(newCount);
+  }
+
+  async function handleTranslate() {
     if (!file) {
-      setError("请先选择 PDF");
+      setError(t.noFile);
       return;
     }
 
-    try {
-      setLoading(true);
-      setError("");
-      setTranslation("");
+    if (usageCount >= DAILY_LIMIT) {
+      setError(t.freeUsed);
+      return;
+    }
 
-      // 获取上传 URL
-      const presignRes = await fetch("/api/upload-url", {
+    setLoading(true);
+    setResult(null);
+    setError("");
+
+    try {
+      const signRes = await fetch("/api/r2-upload-url", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type || "application/pdf",
+        }),
       });
 
-      if (!presignRes.ok) {
-        throw new Error("获取上传地址失败");
+      const signRaw = await signRes.text();
+      let signData: any;
+
+      try {
+        signData = JSON.parse(signRaw);
+      } catch {
+        throw new Error(t.invalid);
       }
 
-      const { uploadUrl, key } = await presignRes.json();
+      if (!signRes.ok) {
+        throw new Error(signData.error || "Failed to get upload URL");
+      }
 
-      // 上传到 R2
-      const uploadRes = await fetch(uploadUrl, {
+      const { uploadUrl, key } = signData as {
+        uploadUrl: string;
+        key: string;
+      };
+
+      const putRes = await fetch(uploadUrl, {
         method: "PUT",
         headers: {
           "Content-Type": "application/pdf",
@@ -41,144 +166,217 @@ export default function TranslatePage() {
         mode: "cors",
       });
 
-      if (!uploadRes.ok) {
-        const text = await uploadRes.text();
-        throw new Error(text || "上传失败");
+      if (!putRes.ok) {
+        const text = await putRes.text();
+        throw new Error(text || "Upload to storage failed");
       }
 
-      // 调用翻译
+      setFileKey(key);
+
       const translateRes = await fetch("/api/translate-pdf", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          key,
-          filename: file.name,
-        }),
+        body: JSON.stringify({ key }),
       });
 
-      if (!translateRes.ok) {
-        const text = await translateRes.text();
-        throw new Error(text || "翻译失败");
+      const translateRaw = await translateRes.text();
+      let translateData: any;
+
+      try {
+        translateData = JSON.parse(translateRaw);
+      } catch {
+        throw new Error(t.invalid);
       }
 
-      const data = await translateRes.json();
+      if (!translateRes.ok) {
+        throw new Error(translateData.error || "Translation failed");
+      }
 
-      setTranslation(data.text || "");
-      setPdfUrl(URL.createObjectURL(file));
+      setResult(translateData);
+      updateUsage(usageCount + 1);
     } catch (err: any) {
-      console.error(err);
-      setError(err?.message || "发生错误");
+      console.error("Upload/translate error:", err);
+      setError(err?.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  function handleUseSample() {
+    setError("这个页面不使用示例文本，请直接上传 PDF。");
+  }
+
+  function handleClear() {
+    setFile(null);
+    setFileKey("");
+    setResult(null);
+    setCurrentPage(1);
+    setError("");
+  }
+
+  const currentItem = useMemo(() => {
+    if (!result?.pages?.length) return null;
+    return result.pages.find((p) => p.page === currentPage) || result.pages[0];
+  }, [result, currentPage]);
+
+  const remaining = Math.max(0, DAILY_LIMIT - usageCount);
+  const isLimitReached = usageCount >= DAILY_LIMIT;
+  const totalPages = result?.totalPages || 0;
+  const pdfSrc = fileKey ? `/api/file/${fileKey}` : "";
 
   return (
-    <div style={{ padding: "40px", maxWidth: "1200px", margin: "0 auto" }}>
-      <h1 style={{ fontSize: "28px", marginBottom: "20px" }}>
-        AI Paper Translator
-      </h1>
+    <main className="min-h-screen bg-slate-50 px-6 py-10">
+      <section className="mx-auto max-w-7xl">
+        <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">{t.title}</h1>
+              <p className="mt-2 max-w-3xl text-slate-600">{t.subtitle}</p>
+              <p className="mt-2 text-sm text-slate-500">
+                {t.freeTrial} · {t.remaining}: {remaining}
+              </p>
+            </div>
 
-      {/* 上传区域 */}
-      <div
-        style={{
-          padding: "20px",
-          border: "1px solid #eee",
-          borderRadius: "10px",
-          marginBottom: "20px",
-        }}
-      >
-        <h3>上传 PDF</h3>
-
-        <input
-          type="file"
-          accept="application/pdf"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) setFile(f);
-          }}
-        />
-
-        {file && (
-          <p style={{ marginTop: "10px" }}>
-            已选择 PDF: <b>{file.name}</b>
-          </p>
-        )}
-
-        <button
-          onClick={handleTranslate}
-          disabled={loading}
-          style={{
-            marginTop: "20px",
-            padding: "12px 30px",
-            borderRadius: "8px",
-            background: "#5b4bff",
-            color: "white",
-            border: "none",
-            cursor: "pointer",
-            fontSize: "16px",
-          }}
-        >
-          {loading ? "翻译中..." : "开始翻译"}
-        </button>
-
-        {error && (
-          <p style={{ color: "red", marginTop: "15px" }}>{error}</p>
-        )}
-      </div>
-
-      {/* 结果区域 */}
-      {(pdfUrl || translation) && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "20px",
-          }}
-        >
-          {/* 左边 PDF */}
-          <div
-            style={{
-              border: "1px solid #eee",
-              borderRadius: "10px",
-              padding: "10px",
-              height: "600px",
-            }}
-          >
-            <h3>原始 PDF</h3>
-
-            {pdfUrl && (
-              <iframe
-                src={pdfUrl}
-                style={{
-                  width: "100%",
-                  height: "550px",
-                  border: "none",
-                }}
-              />
-            )}
-          </div>
-
-          {/* 右边翻译 */}
-          <div
-            style={{
-              border: "1px solid #eee",
-              borderRadius: "10px",
-              padding: "20px",
-              height: "600px",
-              overflow: "auto",
-            }}
-          >
-            <h3>翻译结果</h3>
-
-            <div style={{ whiteSpace: "pre-wrap", lineHeight: "1.6" }}>
-              {translation || "翻译结果会显示在这里"}
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={toggleLang}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
+              >
+                {t.langBtn}
+              </button>
+              <button
+                onClick={handleUseSample}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
+              >
+                {t.useSample}
+              </button>
+              <button
+                onClick={handleClear}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
+              >
+                {t.clear}
+              </button>
             </div>
           </div>
         </div>
-      )}
-    </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <label className="mb-3 block text-sm font-medium text-slate-700">
+            {t.uploadPdf}
+          </label>
+
+          <input
+            type="file"
+            accept=".pdf"
+            onChange={(e) => {
+              const selectedFile = e.target.files?.[0] || null;
+              setFile(selectedFile);
+              setError("");
+              setResult(null);
+              setFileKey("");
+              setCurrentPage(1);
+            }}
+            className="mb-4 block w-full text-sm"
+          />
+
+          {file && (
+            <p className="mt-3 text-sm text-slate-600">
+              {t.pdfSelected}: {file.name}
+            </p>
+          )}
+
+          <div className="mt-4 flex items-center justify-between gap-4">
+            <p className="text-sm text-slate-500">
+              {t.chars}: {file ? file.name.length : 0}
+            </p>
+
+            <button
+              onClick={handleTranslate}
+              disabled={loading || isLimitReached}
+              className="rounded-xl bg-indigo-600 px-6 py-3 text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? t.working : isLimitReached ? t.freeUsed : t.translate}
+            </button>
+          </div>
+
+          {error && <div className="mt-4 break-all text-red-600">{error}</div>}
+        </div>
+
+        <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">
+              {t.original}
+            </h3>
+
+            {pdfSrc ? (
+              <iframe
+                src={pdfSrc}
+                className="h-[900px] w-full rounded-xl border border-slate-200"
+                title="PDF Viewer"
+              />
+            ) : (
+              <div className="flex h-[900px] items-center justify-center rounded-xl border border-dashed border-slate-300 text-slate-400">
+                PDF
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold text-slate-900">
+                {t.translated}
+              </h3>
+
+              {totalPages > 0 && (
+                <div className="text-sm text-slate-500">
+                  {lang === "zh"
+                    ? `${t.page} ${currentPage} / ${totalPages} 页`
+                    : `${t.page} ${currentPage} / ${totalPages}`}
+                </div>
+              )}
+            </div>
+
+            {totalPages > 0 && (
+              <div className="mb-6 flex gap-3">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  {t.prev}
+                </button>
+
+                <button
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  disabled={currentPage >= totalPages}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  {t.next}
+                </button>
+              </div>
+            )}
+
+            <div className="mb-8">
+              <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">
+                {currentItem?.zh || t.parallelPlaceholder}
+              </p>
+            </div>
+
+            <div className="border-t border-slate-200 pt-6">
+              <h4 className="mb-3 font-semibold text-slate-900">
+                {t.original === "原始 PDF" ? "提取文本" : "Extracted Text"}
+              </h4>
+              <div className="max-h-[280px] overflow-auto rounded-xl bg-slate-50 p-4 text-sm leading-7 text-slate-700">
+                {currentItem?.original || ""}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
