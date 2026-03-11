@@ -1,6 +1,8 @@
 import OpenAI from "openai";
 import { PDFParse } from "pdf-parse";
 
+export const runtime = "nodejs";
+
 const client = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY,
   baseURL: "https://api.deepseek.com",
@@ -25,10 +27,21 @@ export async function POST(req: Request) {
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
 
-      const parser = new PDFParse({ data: buffer });
-      const parsedPdf = await parser.getText();
-      text = parsedPdf.text || "";
-      await parser.destroy();
+      try {
+        const parser = new PDFParse({ data: buffer });
+        const parsedPdf = await parser.getText();
+        text = parsedPdf.text || "";
+        await parser.destroy();
+      } catch (pdfError) {
+        console.error("PDF parse error:", pdfError);
+        return Response.json(
+          {
+            error:
+              "This PDF could not be parsed. Please try a text-based PDF or paste the text directly.",
+          },
+          { status: 400 }
+        );
+      }
     }
 
     if (!text || !text.trim()) {
