@@ -45,12 +45,6 @@ export async function POST(req: Request) {
     }
   ],
   "translation_zh": "A natural Chinese explanation of the main meaning",
-  "parallelTranslation": [
-    {
-      "en": "original paragraph",
-      "zh": "translated paragraph"
-    }
-  ],
   "studyNotes": [
     "Revision note 1",
     "Revision note 2",
@@ -90,7 +84,6 @@ Rules:
 - explanation_en must be simple.
 - explanation_zh must be natural Chinese.
 - translation_zh should explain the passage in Chinese naturally.
-- parallelTranslation should align paragraph by paragraph if possible.
 - studyNotes should be suitable for revision or exam prep.
 - essayOutline should be suitable for writing an essay based on this text.
 - paperSections should identify likely academic sections if possible.
@@ -118,7 +111,6 @@ ${trimmedText}`,
         keyPoints: [],
         difficultTerms: [],
         translation_zh: "",
-        parallelTranslation: [],
         studyNotes: [],
         essayOutline: [],
         paperSections: [],
@@ -126,7 +118,7 @@ ${trimmedText}`,
       });
     }
   } catch (error) {
-    console.error("API error:", error);
+    console.error("Summarize API error:", error);
     return Response.json({ error: "AI error occurred" }, { status: 500 });
   }
 }

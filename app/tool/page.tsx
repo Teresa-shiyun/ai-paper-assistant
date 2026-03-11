@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createWorker } from "tesseract.js";
 
 type DifficultTerm = {
   term: string;
@@ -13,125 +14,109 @@ type PaperSection = {
   content: string;
 };
 
-type ParallelItem = {
-  en: string;
-  zh: string;
-};
-
 type ResultData = {
   summary: string;
   keyPoints: string[];
   difficultTerms: DifficultTerm[];
   translation_zh: string;
-  parallelTranslation: ParallelItem[];
   studyNotes: string[];
   essayOutline: string[];
   paperSections: PaperSection[];
   essayDraft: string;
 };
 
-const sampleText = `Artificial intelligence is transforming education by helping students analyze complex academic papers more efficiently. Many international students struggle with dense academic language and unfamiliar terminology when reading research papers. AI-powered summarization tools can automatically extract key ideas, highlight important concepts, and provide simplified explanations of difficult terms. By using these tools, students can save time, improve comprehension, and focus on understanding the most important contributions of a research paper.`;
-
 const DAILY_LIMIT = 2;
+
+const sampleText = `Artificial intelligence is transforming education by helping students analyze complex academic papers more efficiently. Many international students struggle with dense academic language and unfamiliar terminology when reading research papers. AI-powered summarization tools can automatically extract key ideas, highlight important concepts, and provide simplified explanations of difficult terms. By using these tools, students can save time, improve comprehension, and focus on understanding the most important contributions of a research paper.`;
 
 const labels = {
   en: {
-    title: "AI Paper Assistant",
+    title: "AI Paper Summarizer",
     subtitle:
-      "Upload PDF or paste academic text to get summary, parallel translation, notes, paper sections, essay outline, and essay draft.",
-    freeTrial: "Free Trial: 2 AI uses per day",
-    remaining: "Remaining today",
+      "Upload PDF or paste academic text. Results will appear directly below the input area.",
     uploadPdf: "Upload PDF",
-    pastePlaceholder: "Paste academic text here",
+    placeholder: "Paste academic text here",
+    summarize: "Summarize",
+    working: "AI working...",
     useSample: "Use Sample",
     clear: "Clear",
     upgrade: "Upgrade to Pro",
-    summarize: "Summarize",
-    working: "AI working...",
-    limitReached: "Limit Reached",
+    markdown: "Copy All as Markdown",
+    langBtn: "中文",
+    remaining: "Remaining today",
+    freeTrial: "Free Trial: 2 AI uses per day",
+    chars: "Characters",
     pdfSelected: "PDF selected",
-    characters: "Characters",
+    parsing: "Parsing PDF...",
+    pdfFailed:
+      "This PDF could not be read. Please try another PDF or paste the text directly.",
+    noText: "Please paste text or upload a PDF first.",
+    freeUsed: "Free trial used. Upgrade to Pro for unlimited access.",
+    invalid: "Server returned an invalid response. Please try again.",
+    copied: "copied",
+    copyFailed: "Copy failed",
+    markdownCopied: "Markdown copied",
     summary: "Summary",
     keyPoints: "Key Points",
     difficultTerms: "Difficult Terms",
     chineseExplanation: "Chinese Explanation",
-    parallelTranslation: "Parallel Translation",
-    original: "Original",
-    translated: "Translated",
     studyNotes: "Study Notes",
     essayOutline: "Essay Outline",
     paperSections: "Paper Structure",
     essayDraft: "Essay Draft",
-    exportMarkdown: "Copy All as Markdown",
     copy: "Copy",
     summaryPlaceholder: "Your summary will appear here",
     keyPointsPlaceholder: "Key points will appear here",
     difficultTermsPlaceholder: "Difficult terms will appear here",
     chineseExplanationPlaceholder: "Chinese explanation will appear here",
-    parallelTranslationPlaceholder: "Parallel translation will appear here",
     studyNotesPlaceholder: "Study notes will appear here",
     essayOutlinePlaceholder: "Essay outline will appear here",
     paperSectionsPlaceholder: "Paper section analysis will appear here",
     essayDraftPlaceholder: "Essay draft will appear here",
-    pasteOrUpload: "Please paste text or upload a PDF first.",
-    freeUsed: "Free trial used. Upgrade to Pro for unlimited access.",
-    invalidResponse: "Server returned an invalid response. Please try again.",
-    copyFailed: "Copy failed",
-    copied: "copied",
     proSoon: "Pro payment coming soon",
-    switchLang: "中文",
-    pdfParsing: "Parsing PDF...",
-    pdfTextEmpty:
-      "This PDF has no readable text layer. Please paste the paper text directly.",
-    markdownCopied: "Markdown copied",
   },
   zh: {
-    title: "AI 论文助手",
-    subtitle: "上传 PDF 或粘贴学术文本，一键生成总结、左右对照翻译、学习笔记、论文结构、Essay 大纲和 Essay 草稿。",
-    freeTrial: "免费试用：每天 2 次 AI 使用机会",
-    remaining: "今日剩余",
+    title: "AI 文档总结",
+    subtitle: "上传 PDF 或粘贴学术文本，结果会直接显示在输入框下方。",
     uploadPdf: "上传 PDF",
-    pastePlaceholder: "请在这里粘贴学术文本",
+    placeholder: "请在这里粘贴学术文本",
+    summarize: "开始总结",
+    working: "AI 正在处理中...",
     useSample: "使用示例",
     clear: "清空",
     upgrade: "升级 Pro",
-    summarize: "开始总结",
-    working: "AI 正在处理中...",
-    limitReached: "次数已满",
+    markdown: "复制全部 Markdown",
+    langBtn: "EN",
+    remaining: "今日剩余",
+    freeTrial: "免费试用：每天 2 次 AI 使用机会",
+    chars: "字符数",
     pdfSelected: "已选择 PDF",
-    characters: "字符数",
+    parsing: "正在解析 PDF...",
+    pdfFailed: "这个 PDF 无法读取，请尝试其他 PDF 或直接粘贴文本。",
+    noText: "请先粘贴文本或上传 PDF。",
+    freeUsed: "今日免费次数已用完，升级 Pro 可无限使用。",
+    invalid: "服务器返回异常，请稍后再试。",
+    copied: "已复制",
+    copyFailed: "复制失败",
+    markdownCopied: "Markdown 已复制",
     summary: "总结",
     keyPoints: "关键点",
     difficultTerms: "难词解释",
     chineseExplanation: "中文解释",
-    parallelTranslation: "左右对照翻译",
-    original: "原文",
-    translated: "翻译",
     studyNotes: "学习笔记",
     essayOutline: "Essay 大纲",
     paperSections: "论文结构",
     essayDraft: "Essay 草稿",
-    exportMarkdown: "复制全部 Markdown",
     copy: "复制",
     summaryPlaceholder: "这里会显示总结内容",
     keyPointsPlaceholder: "这里会显示关键点",
     difficultTermsPlaceholder: "这里会显示难词解释",
     chineseExplanationPlaceholder: "这里会显示中文解释",
-    parallelTranslationPlaceholder: "这里会显示左右对照翻译",
     studyNotesPlaceholder: "这里会显示学习笔记",
     essayOutlinePlaceholder: "这里会显示 Essay 大纲",
     paperSectionsPlaceholder: "这里会显示论文结构分析",
     essayDraftPlaceholder: "这里会显示 Essay 草稿",
-    pasteOrUpload: "请先粘贴文本或上传 PDF。",
-    freeUsed: "今日免费次数已用完，升级 Pro 可无限使用。",
-    invalidResponse: "服务器返回异常，请稍后再试。",
-    copyFailed: "复制失败",
-    copied: "已复制",
     proSoon: "Pro 付费功能即将上线",
-    switchLang: "EN",
-    pdfParsing: "正在解析 PDF...",
-    pdfTextEmpty: "这个 PDF 没有检测到可读文字层，请直接粘贴论文文本。",
-    markdownCopied: "Markdown 已复制",
   },
 };
 
@@ -143,6 +128,15 @@ function getTodayKey() {
   return `usage_${yyyy}-${mm}-${dd}`;
 }
 
+async function ocrCanvas(canvas: HTMLCanvasElement) {
+  const worker = await createWorker("eng");
+  const {
+    data: { text },
+  } = await worker.recognize(canvas);
+  await worker.terminate();
+  return text;
+}
+
 async function extractPDFText(file: File) {
   const pdfjsLib = await import("pdfjs-dist");
   const arrayBuffer = await file.arrayBuffer();
@@ -152,13 +146,35 @@ async function extractPDFText(file: File) {
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
 
-    const strings = content.items
+    const textContent = await page.getTextContent();
+    const strings = textContent.items
       .map((item: any) => ("str" in item ? item.str : ""))
       .filter(Boolean);
 
-    fullText += strings.join(" ") + "\n";
+    const pageText = strings.join(" ");
+
+    if (pageText.trim().length > 20) {
+      fullText += pageText + "\n\n";
+      continue;
+    }
+
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+
+    if (!context) continue;
+
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+
+    await page.render({
+      canvasContext: context,
+      viewport,
+    }).promise;
+
+    const ocrText = await ocrCanvas(canvas);
+    fullText += ocrText + "\n\n";
   }
 
   return fullText;
@@ -170,8 +186,8 @@ export default function ToolPage() {
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ResultData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [usageCount, setUsageCount] = useState(0);
+  const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
 
   const t = labels[lang];
@@ -180,16 +196,9 @@ export default function ToolPage() {
     const savedLang = localStorage.getItem("ui_lang");
     if (savedLang === "en" || savedLang === "zh") setLang(savedLang);
 
-    const key = getTodayKey();
-    const savedUsage = localStorage.getItem(key);
+    const savedUsage = localStorage.getItem(getTodayKey());
     setUsageCount(savedUsage ? Number(savedUsage) : 0);
   }, []);
-
-  function updateUsage(newCount: number) {
-    const key = getTodayKey();
-    localStorage.setItem(key, String(newCount));
-    setUsageCount(newCount);
-  }
 
   function toggleLang() {
     const next = lang === "en" ? "zh" : "en";
@@ -197,27 +206,32 @@ export default function ToolPage() {
     localStorage.setItem("ui_lang", next);
   }
 
+  function updateUsage(newCount: number) {
+    localStorage.setItem(getTodayKey(), String(newCount));
+    setUsageCount(newCount);
+  }
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selectedFile = e.target.files?.[0] || null;
     if (!selectedFile) return;
 
     setFile(selectedFile);
+    setResult(null);
     setError("");
     setCopied("");
-    setResult(null);
 
     try {
       setLoading(true);
-      const extractedText = await extractPDFText(selectedFile);
+      const extracted = await extractPDFText(selectedFile);
 
-      if (!extractedText || extractedText.trim().length < 50) {
-        throw new Error("PDF text empty");
+      if (!extracted || extracted.trim().length < 50) {
+        throw new Error("PDF parse failed");
       }
 
-      setText(extractedText);
+      setText(extracted);
     } catch {
       setText("");
-      setError(t.pdfTextEmpty);
+      setError(t.pdfFailed);
     } finally {
       setLoading(false);
     }
@@ -225,7 +239,7 @@ export default function ToolPage() {
 
   async function handleSummarize() {
     if (!text.trim()) {
-      setError(t.pasteOrUpload);
+      setError(t.noText);
       return;
     }
 
@@ -235,8 +249,8 @@ export default function ToolPage() {
     }
 
     setLoading(true);
-    setError("");
     setResult(null);
+    setError("");
     setCopied("");
 
     try {
@@ -249,12 +263,12 @@ export default function ToolPage() {
       });
 
       const raw = await res.text();
-
       let data: any;
+
       try {
         data = JSON.parse(raw);
       } catch {
-        throw new Error(t.invalidResponse);
+        throw new Error(t.invalid);
       }
 
       if (!res.ok) {
@@ -300,10 +314,10 @@ export default function ToolPage() {
   function buildMarkdown() {
     if (!result) return "";
 
-    const keyPointsText =
+    const keyPoints =
       result.keyPoints?.map((item) => `- ${item}`).join("\n") || "";
 
-    const difficultTermsText =
+    const difficultTerms =
       result.difficultTerms
         ?.map(
           (item) =>
@@ -311,21 +325,13 @@ export default function ToolPage() {
         )
         .join("\n") || "";
 
-    const parallelText =
-      result.parallelTranslation
-        ?.map(
-          (item) =>
-            `### ${t.original}\n${item.en}\n\n### ${t.translated}\n${item.zh}`
-        )
-        .join("\n\n") || "";
-
-    const notesText =
+    const notes =
       result.studyNotes?.map((item) => `- ${item}`).join("\n") || "";
 
-    const outlineText =
+    const outline =
       result.essayOutline?.map((item) => `- ${item}`).join("\n") || "";
 
-    const sectionsText =
+    const sections =
       result.paperSections
         ?.map((item) => `- **${item.section}**: ${item.content}`)
         .join("\n") || "";
@@ -336,25 +342,22 @@ export default function ToolPage() {
 ${result.summary || ""}
 
 ## ${t.keyPoints}
-${keyPointsText}
+${keyPoints}
 
 ## ${t.difficultTerms}
-${difficultTermsText}
+${difficultTerms}
 
 ## ${t.chineseExplanation}
 ${result.translation_zh || ""}
 
-## ${t.parallelTranslation}
-${parallelText}
-
 ## ${t.studyNotes}
-${notesText}
+${notes}
 
 ## ${t.essayOutline}
-${outlineText}
+${outline}
 
 ## ${t.paperSections}
-${sectionsText}
+${sections}
 
 ## ${t.essayDraft}
 ${result.essayDraft || ""}
@@ -382,276 +385,254 @@ ${result.essayDraft || ""}
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
-      <section className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">{t.title}</h1>
-            <p className="mt-2 text-slate-600">{t.subtitle}</p>
-            <p className="mt-1 text-sm text-slate-500">
-              {t.freeTrial} · {t.remaining}: {remaining}
-            </p>
-          </div>
+      <section className="mx-auto max-w-5xl">
+        <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">{t.title}</h1>
+              <p className="mt-2 max-w-3xl text-slate-600">{t.subtitle}</p>
+              <p className="mt-2 text-sm text-slate-500">
+                {t.freeTrial} · {t.remaining}: {remaining}
+              </p>
+            </div>
 
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={toggleLang}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
-            >
-              {t.switchLang}
-            </button>
-            <button
-              onClick={handleUseSample}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
-            >
-              {t.useSample}
-            </button>
-            <button
-              onClick={handleClear}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
-            >
-              {t.clear}
-            </button>
-            <button
-              onClick={copyMarkdown}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
-              disabled={!result}
-            >
-              {t.exportMarkdown}
-            </button>
-            <button
-              className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-              onClick={() => alert(t.proSoon)}
-            >
-              {t.upgrade}
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={toggleLang}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
+              >
+                {t.langBtn}
+              </button>
+              <button
+                onClick={handleUseSample}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
+              >
+                {t.useSample}
+              </button>
+              <button
+                onClick={handleClear}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
+              >
+                {t.clear}
+              </button>
+              <button
+                onClick={copyMarkdown}
+                disabled={!result}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+              >
+                {t.markdown}
+              </button>
+              <button
+                onClick={() => alert(t.proSoon)}
+                className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                {t.upgrade}
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr]">
-          <div className="space-y-5">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <label className="mb-3 block text-sm font-medium text-slate-700">
-                {t.uploadPdf}
-              </label>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <label className="mb-3 block text-sm font-medium text-slate-700">
+            {t.uploadPdf}
+          </label>
 
-              <input
-                type="file"
-                accept=".pdf"
-                onChange={handleFileChange}
-                className="mb-4 block w-full text-sm"
-              />
+          <input
+            type="file"
+            accept=".pdf"
+            onChange={handleFileChange}
+            className="mb-4 block w-full text-sm"
+          />
 
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder={t.pastePlaceholder}
-                className="h-[320px] w-full rounded-xl border border-slate-300 p-4 outline-none focus:border-indigo-500"
-              />
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={t.placeholder}
+            className="h-[300px] w-full rounded-xl border border-slate-300 p-4 outline-none focus:border-indigo-500"
+          />
 
-              <div className="mt-4 flex items-center justify-between gap-4">
-                <p className="text-sm text-slate-500">
-                  {t.characters}: {text.length}
-                </p>
+          <div className="mt-4 flex items-center justify-between gap-4">
+            <p className="text-sm text-slate-500">
+              {t.chars}: {text.length}
+            </p>
 
-                <button
-                  onClick={handleSummarize}
-                  className="rounded-xl bg-indigo-600 px-6 py-3 text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={loading || isLimitReached}
-                >
-                  {loading
-                    ? t.working
-                    : isLimitReached
-                    ? t.limitReached
-                    : t.summarize}
-                </button>
-              </div>
-
-              {loading && file && (
-                <p className="mt-3 text-sm text-slate-600">{t.pdfParsing}</p>
-              )}
-
-              {file && !loading && (
-                <p className="mt-3 text-sm text-slate-600">
-                  {t.pdfSelected}: {file.name}
-                </p>
-              )}
-
-              {error && <div className="mt-4 text-red-600">{error}</div>}
-              {copied && <div className="mt-4 text-emerald-600">{copied}</div>}
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-4 text-lg font-semibold text-slate-900">
-                {t.parallelTranslation}
-              </h3>
-
-              {result?.parallelTranslation?.length ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-xl bg-slate-50 p-4">
-                    <p className="mb-3 font-semibold text-slate-900">
-                      {t.original}
-                    </p>
-                    <div className="space-y-3 text-sm leading-7 text-slate-700">
-                      {result.parallelTranslation.map((item, i) => (
-                        <p key={i}>{item.en}</p>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl bg-slate-50 p-4">
-                    <p className="mb-3 font-semibold text-slate-900">
-                      {t.translated}
-                    </p>
-                    <div className="space-y-3 text-sm leading-7 text-slate-700">
-                      {result.parallelTranslation.map((item, i) => (
-                        <p key={i}>{item.zh}</p>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">
-                  {t.parallelTranslationPlaceholder}
-                </p>
-              )}
-            </div>
+            <button
+              onClick={handleSummarize}
+              disabled={loading || isLimitReached}
+              className="rounded-xl bg-indigo-600 px-6 py-3 text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading
+                ? t.working
+                : isLimitReached
+                ? t.freeUsed
+                : t.summarize}
+            </button>
           </div>
 
-          <div className="space-y-5">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="font-semibold text-slate-900">{t.summary}</h3>
-                <button
-                  onClick={() => copyText(t.summary, summaryText)}
-                  className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                  disabled={!summaryText}
-                >
-                  {t.copy}
-                </button>
+          {loading && file && (
+            <p className="mt-3 text-sm text-slate-600">{t.parsing}</p>
+          )}
+
+          {file && !loading && (
+            <p className="mt-3 text-sm text-slate-600">
+              {t.pdfSelected}: {file.name}
+            </p>
+          )}
+
+          {error && <div className="mt-4 text-red-600">{error}</div>}
+          {copied && <div className="mt-4 text-emerald-600">{copied}</div>}
+        </div>
+
+        <div className="mt-8 space-y-5">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="font-semibold text-slate-900">{t.summary}</h3>
+              <button
+                onClick={() => copyText(t.summary, summaryText)}
+                disabled={!summaryText}
+                className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                {t.copy}
+              </button>
+            </div>
+            <p className="text-sm leading-7 text-slate-700">
+              {result?.summary || t.summaryPlaceholder}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="mb-3 font-semibold text-slate-900">{t.keyPoints}</h3>
+            {result?.keyPoints?.length ? (
+              <ul className="space-y-2 text-sm text-slate-700">
+                {result.keyPoints.map((item, i) => (
+                  <li key={i}>• {item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-500">{t.keyPointsPlaceholder}</p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="mb-3 font-semibold text-slate-900">
+              {t.difficultTerms}
+            </h3>
+            {result?.difficultTerms?.length ? (
+              <div className="space-y-3">
+                {result.difficultTerms.map((item, i) => (
+                  <div key={i} className="rounded-xl bg-slate-50 p-3">
+                    <p className="font-semibold text-slate-900">{item.term}</p>
+                    <p className="mt-1 text-sm text-slate-700">
+                      EN: {item.explanation_en}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-700">
+                      中文: {item.explanation_zh}
+                    </p>
+                  </div>
+                ))}
               </div>
-              <p className="text-sm leading-7 text-slate-700">
-                {result?.summary || t.summaryPlaceholder}
+            ) : (
+              <p className="text-sm text-slate-500">
+                {t.difficultTermsPlaceholder}
               </p>
-            </div>
+            )}
+          </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-3 font-semibold text-slate-900">{t.keyPoints}</h3>
-              {result?.keyPoints?.length ? (
-                <ul className="space-y-2 text-sm text-slate-700">
-                  {result.keyPoints.map((p, i) => (
-                    <li key={i}>• {p}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-slate-500">{t.keyPointsPlaceholder}</p>
-              )}
-            </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="mb-3 font-semibold text-slate-900">
+              {t.chineseExplanation}
+            </h3>
+            <p className="text-sm leading-7 text-slate-700">
+              {result?.translation_zh || t.chineseExplanationPlaceholder}
+            </p>
+          </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-3 font-semibold text-slate-900">{t.difficultTerms}</h3>
-              {result?.difficultTerms?.length ? (
-                <div className="space-y-3">
-                  {result.difficultTerms.map((item, i) => (
-                    <div key={i} className="rounded-xl bg-slate-50 p-3">
-                      <p className="font-semibold text-slate-900">{item.term}</p>
-                      <p className="mt-1 text-sm text-slate-700">
-                        EN: {item.explanation_en}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-700">
-                        中文: {item.explanation_zh}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">{t.difficultTermsPlaceholder}</p>
-              )}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="font-semibold text-slate-900">{t.studyNotes}</h3>
+              <button
+                onClick={() => copyText(t.studyNotes, notesText)}
+                disabled={!notesText}
+                className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                {t.copy}
+              </button>
             </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-3 font-semibold text-slate-900">
-                {t.chineseExplanation}
-              </h3>
-              <p className="text-sm leading-7 text-slate-700">
-                {result?.translation_zh || t.chineseExplanationPlaceholder}
+            {result?.studyNotes?.length ? (
+              <ul className="space-y-2 text-sm text-slate-700">
+                {result.studyNotes.map((item, i) => (
+                  <li key={i}>• {item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-500">
+                {t.studyNotesPlaceholder}
               </p>
-            </div>
+            )}
+          </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="font-semibold text-slate-900">{t.studyNotes}</h3>
-                <button
-                  onClick={() => copyText(t.studyNotes, notesText)}
-                  className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                  disabled={!notesText}
-                >
-                  {t.copy}
-                </button>
-              </div>
-              {result?.studyNotes?.length ? (
-                <ul className="space-y-2 text-sm text-slate-700">
-                  {result.studyNotes.map((n, i) => (
-                    <li key={i}>• {n}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-slate-500">{t.studyNotesPlaceholder}</p>
-              )}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="font-semibold text-slate-900">{t.essayOutline}</h3>
+              <button
+                onClick={() => copyText(t.essayOutline, outlineText)}
+                disabled={!outlineText}
+                className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                {t.copy}
+              </button>
             </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="font-semibold text-slate-900">{t.essayOutline}</h3>
-                <button
-                  onClick={() => copyText(t.essayOutline, outlineText)}
-                  className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                  disabled={!outlineText}
-                >
-                  {t.copy}
-                </button>
-              </div>
-              {result?.essayOutline?.length ? (
-                <ul className="space-y-2 text-sm text-slate-700">
-                  {result.essayOutline.map((n, i) => (
-                    <li key={i}>• {n}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-slate-500">{t.essayOutlinePlaceholder}</p>
-              )}
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-3 font-semibold text-slate-900">{t.paperSections}</h3>
-              {result?.paperSections?.length ? (
-                <div className="space-y-3">
-                  {result.paperSections.map((item, i) => (
-                    <div key={i} className="rounded-xl bg-slate-50 p-3">
-                      <p className="font-semibold text-slate-900">{item.section}</p>
-                      <p className="mt-1 text-sm text-slate-700">{item.content}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">{t.paperSectionsPlaceholder}</p>
-              )}
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="font-semibold text-slate-900">{t.essayDraft}</h3>
-                <button
-                  onClick={() => copyText(t.essayDraft, draftText)}
-                  className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                  disabled={!draftText}
-                >
-                  {t.copy}
-                </button>
-              </div>
-              <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">
-                {result?.essayDraft || t.essayDraftPlaceholder}
+            {result?.essayOutline?.length ? (
+              <ul className="space-y-2 text-sm text-slate-700">
+                {result.essayOutline.map((item, i) => (
+                  <li key={i}>• {item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-500">
+                {t.essayOutlinePlaceholder}
               </p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="mb-3 font-semibold text-slate-900">
+              {t.paperSections}
+            </h3>
+            {result?.paperSections?.length ? (
+              <div className="space-y-3">
+                {result.paperSections.map((item, i) => (
+                  <div key={i} className="rounded-xl bg-slate-50 p-3">
+                    <p className="font-semibold text-slate-900">
+                      {item.section}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-700">
+                      {item.content}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">
+                {t.paperSectionsPlaceholder}
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="font-semibold text-slate-900">{t.essayDraft}</h3>
+              <button
+                onClick={() => copyText(t.essayDraft, draftText)}
+                disabled={!draftText}
+                className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                {t.copy}
+              </button>
             </div>
+            <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">
+              {result?.essayDraft || t.essayDraftPlaceholder}
+            </p>
           </div>
         </div>
       </section>
