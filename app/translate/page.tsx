@@ -18,7 +18,7 @@ const DAILY_LIMIT = 2;
 const labels = {
   en: {
     title: "AI PDF Translator",
-    subtitle: "Upload PDF or paste academic text to get side-by-side translation.",
+    subtitle: "Upload PDF to get side-by-side translation.",
     uploadPdf: "Upload PDF",
     translate: "Translate",
     working: "AI working...",
@@ -75,7 +75,7 @@ function getTodayKey() {
 export default function TranslatePage() {
   const [lang, setLang] = useState<"en" | "zh">("zh");
   const [file, setFile] = useState<File | null>(null);
-  const [fileKey, setFileKey] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
   const [result, setResult] = useState<TranslatePdfResult | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -91,6 +91,14 @@ export default function TranslatePage() {
     const savedUsage = localStorage.getItem(getTodayKey());
     setUsageCount(savedUsage ? Number(savedUsage) : 0);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   function toggleLang() {
     const next = lang === "en" ? "zh" : "en";
@@ -131,9 +139,8 @@ export default function TranslatePage() {
       });
 
       const signRaw = await signRes.text();
-      console.log("r2-upload-url raw:", signRaw);
-
       let signData: any;
+
       try {
         signData = JSON.parse(signRaw);
       } catch {
@@ -149,9 +156,6 @@ export default function TranslatePage() {
         key: string;
       };
 
-      console.log("uploadUrl:", uploadUrl);
-      console.log("key:", key);
-
       const putRes = await fetch(uploadUrl, {
         method: "PUT",
         headers: {
@@ -163,11 +167,8 @@ export default function TranslatePage() {
 
       if (!putRes.ok) {
         const putText = await putRes.text();
-        console.log("R2 PUT failed:", putText);
         throw new Error(`上传到 R2 失败：${putText || putRes.status}`);
       }
-
-      setFileKey(key);
 
       const translateRes = await fetch("/api/translate-pdf", {
         method: "POST",
@@ -178,9 +179,8 @@ export default function TranslatePage() {
       });
 
       const translateRaw = await translateRes.text();
-      console.log("translate-pdf raw:", translateRaw);
-
       let translateData: any;
+
       try {
         translateData = JSON.parse(translateRaw);
       } catch {
@@ -206,8 +206,11 @@ export default function TranslatePage() {
   }
 
   function handleClear() {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setFile(null);
-    setFileKey("");
+    setPreviewUrl("");
     setResult(null);
     setCurrentPage(1);
     setError("");
@@ -221,7 +224,6 @@ export default function TranslatePage() {
   const remaining = Math.max(0, DAILY_LIMIT - usageCount);
   const isLimitReached = usageCount >= DAILY_LIMIT;
   const totalPages = result?.totalPages || 0;
-  const pdfSrc = fileKey ? `/api/file/${fileKey}` : "";
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
@@ -269,10 +271,15 @@ export default function TranslatePage() {
             accept=".pdf"
             onChange={(e) => {
               const selectedFile = e.target.files?.[0] || null;
+
+              if (previewUrl) {
+                URL.revokeObjectURL(previewUrl);
+              }
+
               setFile(selectedFile);
+              setPreviewUrl(selectedFile ? URL.createObjectURL(selectedFile) : "");
               setError("");
               setResult(null);
-              setFileKey("");
               setCurrentPage(1);
             }}
             className="mb-4 block w-full text-sm"
@@ -307,9 +314,9 @@ export default function TranslatePage() {
               {t.original}
             </h3>
 
-            {pdfSrc ? (
+            {previewUrl ? (
               <iframe
-                src={pdfSrc}
+                src={previewUrl}
                 className="h-[900px] w-full rounded-xl border border-slate-200"
                 title="PDF Viewer"
               />
