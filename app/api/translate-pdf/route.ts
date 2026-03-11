@@ -34,6 +34,7 @@ function cleanText(markdown: string) {
 
 async function uploadPdfToMistral(fileBuffer: Buffer, filename: string) {
   const uint8 = new Uint8Array(fileBuffer);
+
   const arrayBuffer = uint8.buffer.slice(
     uint8.byteOffset,
     uint8.byteOffset + uint8.byteLength
@@ -41,6 +42,7 @@ async function uploadPdfToMistral(fileBuffer: Buffer, filename: string) {
 
   const form = new FormData();
   form.append("purpose", "ocr");
+
   form.append(
     "file",
     new Blob([arrayBuffer], { type: "application/pdf" }),
@@ -109,7 +111,7 @@ async function translatePageToChinese(content: string) {
       },
       {
         role: "user",
-        content: `Translate the following academic page into Chinese. Return Chinese only, no markdown fences.
+        content: `Translate the following academic page into Chinese. Return Chinese only.
 
 ${trimmed}`,
       },
@@ -145,6 +147,7 @@ export async function POST(req: Request) {
     const filename = key.split("/").pop() || "document.pdf";
 
     const fileId = await uploadPdfToMistral(pdfBuffer, filename);
+
     const ocrPages = await runMistralOcr(fileId);
 
     if (!ocrPages.length) {
@@ -154,9 +157,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const translatedPages = [];
+    // ⭐ 只翻译前3页（稳定测试）
+    const pagesToTranslate = ocrPages.slice(0, 3);
 
-    for (const page of ocrPages) {
+    const translatedPages: any[] = [];
+
+    for (const page of pagesToTranslate) {
       const original = cleanText(page.markdown);
 
       if (!original) {
@@ -180,8 +186,11 @@ export async function POST(req: Request) {
     return Response.json({
       totalPages: translatedPages.length,
       pages: translatedPages,
+      note: "测试模式：当前只翻译前3页",
     });
   } catch (error: any) {
+    console.error("translate-pdf error:", error);
+
     return Response.json(
       { error: error?.message || "PDF translation failed" },
       { status: 500 }
