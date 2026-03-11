@@ -1,76 +1,64 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-type ParallelItem = {
-  en: string;
+type PageItem = {
+  page: number;
+  original: string;
   zh: string;
 };
 
-type TranslateResult = {
-  parallelTranslation: ParallelItem[];
-  summary_zh: string;
-  keywords: string[];
+type TranslatePdfResult = {
+  totalPages: number;
+  pages: PageItem[];
 };
 
 const DAILY_LIMIT = 2;
 
-const sampleText = `Artificial intelligence is transforming education by helping students analyze complex academic papers more efficiently. Many international students struggle with dense academic language and unfamiliar terminology when reading research papers. AI-powered summarization tools can automatically extract key ideas, highlight important concepts, and provide simplified explanations of difficult terms.`;
-
 const labels = {
   en: {
     title: "AI PDF Translator",
-    subtitle:
-      "Upload PDF or paste academic text to get side-by-side translation.",
+    subtitle: "Left: original PDF. Right: translated page.",
     uploadPdf: "Upload PDF",
-    placeholder: "Paste academic text here",
-    translate: "Translate",
-    working: "AI working...",
+    processing: "Uploading and translating PDF...",
+    selected: "PDF selected",
+    translate: "Translate PDF",
     useSample: "Use Sample",
     clear: "Clear",
     langBtn: "中文",
     remaining: "Remaining today",
     freeTrial: "Free Trial: 2 AI uses per day",
-    chars: "Characters",
-    pdfSelected: "PDF selected",
-    parsing: "Reading PDF with OCR...",
-    pdfFailed:
-      "This PDF could not be read. Please try another PDF or paste the text directly.",
-    noText: "Please paste text or upload a PDF first.",
-    freeUsed: "Free trial used. Upgrade to Pro for unlimited access.",
-    invalid: "Server returned an invalid response. Please try again.",
-    original: "Original",
-    translated: "Translated",
-    summaryZh: "Chinese Summary",
-    keywords: "Keywords",
-    summaryPlaceholder: "Chinese summary will appear here",
-    parallelPlaceholder: "Parallel translation will appear here",
+    noFile: "Please upload a PDF first.",
+    limit: "Free trial used. Upgrade to Pro for unlimited access.",
+    page: "Page",
+    prev: "Previous",
+    next: "Next",
+    translated: "Chinese Translation",
+    originalText: "Extracted Text",
+    placeholder: "Translation will appear here",
+    sampleMode: "Sample mode does not apply on this page. Please upload a PDF.",
   },
   zh: {
-    title: "AI 文档翻译",
-    subtitle: "上传 PDF 或粘贴学术文本，获得左右对照翻译。",
+    title: "AI PDF 翻译",
+    subtitle: "左边原始 PDF，右边当前页翻译。",
     uploadPdf: "上传 PDF",
-    placeholder: "请在这里粘贴学术文本",
+    processing: "正在上传并翻译 PDF...",
+    selected: "已选择 PDF",
     translate: "开始翻译",
-    working: "AI 正在处理中...",
     useSample: "使用示例",
     clear: "清空",
     langBtn: "EN",
     remaining: "今日剩余",
     freeTrial: "免费试用：每天 2 次 AI 使用机会",
-    chars: "字符数",
-    pdfSelected: "已选择 PDF",
-    parsing: "正在用 OCR 读取 PDF...",
-    pdfFailed: "这个 PDF 无法读取，请尝试其他 PDF 或直接粘贴文本。",
-    noText: "请先粘贴文本或上传 PDF。",
-    freeUsed: "今日免费次数已用完，升级 Pro 可无限使用。",
-    invalid: "服务器返回异常，请稍后再试。",
-    original: "原文",
-    translated: "翻译",
-    summaryZh: "中文总结",
-    keywords: "关键词",
-    summaryPlaceholder: "这里会显示中文总结",
-    parallelPlaceholder: "这里会显示左右对照翻译",
+    noFile: "请先上传 PDF。",
+    limit: "今日免费次数已用完，升级 Pro 可无限使用。",
+    page: "第",
+    prev: "上一页",
+    next: "下一页",
+    translated: "中文翻译",
+    originalText: "提取文本",
+    placeholder: "这里会显示翻译内容",
+    sampleMode: "这个页面不使用示例文本，请直接上传 PDF。",
   },
 };
 
@@ -79,14 +67,15 @@ function getTodayKey() {
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, "0");
   const dd = String(today.getDate()).padStart(2, "0");
-  return `translate_usage_${yyyy}-${mm}-${dd}`;
+  return `translate_pdf_usage_${yyyy}-${mm}-${dd}`;
 }
 
 export default function TranslatePage() {
-  const [lang, setLang] = useState<"en" | "zh">("en");
-  const [text, setText] = useState("");
+  const [lang, setLang] = useState<"en" | "zh">("zh");
   const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<TranslateResult | null>(null);
+  const [fileKey, setFileKey] = useState("");
+  const [result, setResult] = useState<TranslatePdfResult | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [usageCount, setUsageCount] = useState(0);
   const [error, setError] = useState("");
@@ -112,85 +101,55 @@ export default function TranslatePage() {
     setUsageCount(newCount);
   }
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const selectedFile = e.target.files?.[0] || null;
-    if (!selectedFile) return;
-
-    setFile(selectedFile);
-    setResult(null);
-    setError("");
-
-    try {
-      setLoading(true);
-
-      const form = new FormData();
-      form.append("file", selectedFile);
-
-      const res = await fetch("/api/ocr", {
-        method: "POST",
-        body: form,
-      });
-
-      const raw = await res.text();
-      let data: any;
-
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        throw new Error(raw);
-      }
-
-      if (!res.ok) {
-        throw new Error(data.error || t.pdfFailed);
-      }
-
-      setText(data.text || "");
-    } catch (err: any) {
-      setText("");
-      setError(err.message || t.pdfFailed);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleTranslate() {
-    if (!text.trim()) {
-      setError(t.noText);
+  async function handleUploadAndTranslate() {
+    if (!file) {
+      setError(t.noFile);
       return;
     }
 
     if (usageCount >= DAILY_LIMIT) {
-      setError(t.freeUsed);
+      setError(t.limit);
       return;
     }
 
-    setLoading(true);
-    setResult(null);
-    setError("");
-
     try {
-      const res = await fetch("/api/translate", {
+      setLoading(true);
+      setError("");
+      setResult(null);
+      setCurrentPage(1);
+
+      const form = new FormData();
+      form.append("file", file);
+
+      const uploadRes = await fetch("/api/upload", {
+        method: "POST",
+        body: form,
+      });
+
+      const uploadData = await uploadRes.json();
+
+      if (!uploadRes.ok) {
+        throw new Error(uploadData.error || "Upload failed");
+      }
+
+      const key = uploadData.key as string;
+      setFileKey(key);
+
+      const translateRes = await fetch("/api/translate-pdf", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ key }),
       });
 
-      const raw = await res.text();
-      let data: any;
+      const translateData = await translateRes.json();
 
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        throw new Error(t.invalid);
+      if (!translateRes.ok) {
+        throw new Error(translateData.error || "Translation failed");
       }
 
-      if (!res.ok) {
-        throw new Error(data.error || "Request failed");
-      }
-
-      setResult(data);
+      setResult(translateData);
       updateUsage(usageCount + 1);
     } catch (err: any) {
       setError(err.message || "Something went wrong");
@@ -199,22 +158,23 @@ export default function TranslatePage() {
     }
   }
 
-  function handleUseSample() {
-    setText(sampleText);
+  function handleClear() {
     setFile(null);
+    setFileKey("");
     setResult(null);
+    setCurrentPage(1);
     setError("");
   }
 
-  function handleClear() {
-    setText("");
-    setFile(null);
-    setResult(null);
-    setError("");
-  }
+  const currentItem = useMemo(() => {
+    if (!result?.pages?.length) return null;
+    return result.pages.find((p) => p.page === currentPage) || result.pages[0];
+  }, [result, currentPage]);
+
+  const pdfSrc = fileKey ? `/api/file/${fileKey}` : "";
 
   const remaining = Math.max(0, DAILY_LIMIT - usageCount);
-  const isLimitReached = usageCount >= DAILY_LIMIT;
+  const totalPages = result?.totalPages || 0;
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
@@ -236,12 +196,14 @@ export default function TranslatePage() {
               >
                 {t.langBtn}
               </button>
+
               <button
-                onClick={handleUseSample}
+                onClick={() => alert(t.sampleMode)}
                 className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
               >
                 {t.useSample}
               </button>
+
               <button
                 onClick={handleClear}
                 className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
@@ -252,7 +214,7 @@ export default function TranslatePage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <label className="mb-3 block text-sm font-medium text-slate-700">
             {t.uploadPdf}
           </label>
@@ -260,97 +222,98 @@ export default function TranslatePage() {
           <input
             type="file"
             accept=".pdf"
-            onChange={handleFileChange}
+            onChange={(e) => {
+              const selected = e.target.files?.[0] || null;
+              setFile(selected);
+              setError("");
+              setResult(null);
+              setFileKey("");
+              setCurrentPage(1);
+            }}
             className="mb-4 block w-full text-sm"
           />
 
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={t.placeholder}
-            className="h-[260px] w-full rounded-xl border border-slate-300 p-4 outline-none focus:border-indigo-500"
-          />
-
-          <div className="mt-4 flex items-center justify-between gap-4">
-            <p className="text-sm text-slate-500">
-              {t.chars}: {text.length}
-            </p>
-
-            <button
-              onClick={handleTranslate}
-              disabled={loading || isLimitReached}
-              className="rounded-xl bg-indigo-600 px-6 py-3 text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? t.working : isLimitReached ? t.freeUsed : t.translate}
-            </button>
-          </div>
-
-          {loading && file && (
-            <p className="mt-3 text-sm text-slate-600">{t.parsing}</p>
-          )}
-
-          {file && !loading && (
-            <p className="mt-3 text-sm text-slate-600">
-              {t.pdfSelected}: {file.name}
+          {file && (
+            <p className="mb-4 text-sm text-slate-600">
+              {t.selected}: {file.name}
             </p>
           )}
+
+          <button
+            onClick={handleUploadAndTranslate}
+            disabled={loading}
+            className="rounded-xl bg-indigo-600 px-6 py-3 text-white hover:bg-indigo-700 disabled:opacity-60"
+          >
+            {loading ? t.processing : t.translate}
+          </button>
 
           {error && <div className="mt-4 text-red-600">{error}</div>}
         </div>
 
-        <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_1fr]">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="mb-4 text-lg font-semibold text-slate-900">
-              {t.original}
-            </h3>
-
-            {result?.parallelTranslation?.length ? (
-              <div className="space-y-4 text-sm leading-7 text-slate-700">
-                {result.parallelTranslation.map((item, i) => (
-                  <p key={i}>{item.en}</p>
-                ))}
+        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            {pdfSrc ? (
+              <iframe
+                src={pdfSrc}
+                className="h-[900px] w-full rounded-xl border border-slate-200"
+                title="PDF Viewer"
+              />
+            ) : (
+              <div className="flex h-[900px] items-center justify-center rounded-xl border border-dashed border-slate-300 text-slate-400">
+                PDF
               </div>
-            ) : (
-              <p className="text-sm text-slate-500">{t.parallelPlaceholder}</p>
             )}
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="mb-4 text-lg font-semibold text-slate-900">
-              {t.translated}
-            </h3>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold text-slate-900">
+                {t.translated}
+              </h3>
 
-            {result?.parallelTranslation?.length ? (
-              <div className="space-y-4 text-sm leading-7 text-slate-700">
-                {result.parallelTranslation.map((item, i) => (
-                  <p key={i}>{item.zh}</p>
-                ))}
+              {totalPages > 0 && (
+                <div className="text-sm text-slate-500">
+                  {lang === "zh" ? `${t.page} ${currentPage} / ${totalPages} 页` : `${t.page} ${currentPage} / ${totalPages}`}
+                </div>
+              )}
+            </div>
+
+            {totalPages > 0 && (
+              <div className="mb-6 flex gap-3">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  {t.prev}
+                </button>
+
+                <button
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  disabled={currentPage >= totalPages}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  {t.next}
+                </button>
               </div>
-            ) : (
-              <p className="text-sm text-slate-500">{t.parallelPlaceholder}</p>
             )}
-          </div>
-        </div>
 
-        <div className="mt-8 grid gap-6 md:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="mb-3 font-semibold text-slate-900">{t.summaryZh}</h3>
-            <p className="text-sm leading-7 text-slate-700">
-              {result?.summary_zh || t.summaryPlaceholder}
-            </p>
-          </div>
+            <div className="mb-8">
+              <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">
+                {currentItem?.zh || t.placeholder}
+              </p>
+            </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="mb-3 font-semibold text-slate-900">{t.keywords}</h3>
-            {result?.keywords?.length ? (
-              <ul className="space-y-2 text-sm text-slate-700">
-                {result.keywords.map((item, i) => (
-                  <li key={i}>• {item}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-slate-500">{t.summaryPlaceholder}</p>
-            )}
+            <div className="border-t border-slate-200 pt-6">
+              <h4 className="mb-3 font-semibold text-slate-900">
+                {t.originalText}
+              </h4>
+              <div className="max-h-[280px] overflow-auto rounded-xl bg-slate-50 p-4 text-sm leading-7 text-slate-700">
+                {currentItem?.original || ""}
+              </div>
+            </div>
           </div>
         </div>
       </section>
