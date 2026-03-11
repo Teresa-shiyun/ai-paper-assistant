@@ -11,12 +11,15 @@ const s3 = new S3Client({
   },
 });
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { key: string[] } }
-) {
+export async function GET(req: Request, context: any) {
   try {
-    const objectKey = params.key.join("/");
+    const keyParts = context?.params?.key;
+
+    if (!Array.isArray(keyParts) || keyParts.length === 0) {
+      return new Response("File not found", { status: 404 });
+    }
+
+    const objectKey = keyParts.join("/");
 
     const result = await s3.send(
       new GetObjectCommand({
