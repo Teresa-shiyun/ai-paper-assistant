@@ -18,7 +18,6 @@ type ResultData = {
 
 const sampleText = `Artificial intelligence is transforming education by helping students analyze complex academic papers more efficiently. Many international students struggle with dense academic language and unfamiliar terminology when reading research papers. AI-powered summarization tools can automatically extract key ideas, highlight important concepts, and provide simplified explanations of difficult terms. By using these tools, students can save time, improve comprehension, and focus on understanding the most important contributions of a research paper.`;
 
-// 免费次数改成 2
 const DAILY_LIMIT = 2;
 
 function getTodayKey() {
@@ -31,6 +30,7 @@ function getTodayKey() {
 
 export default function ToolPage() {
   const [text, setText] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ResultData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -49,8 +49,8 @@ export default function ToolPage() {
   }
 
   async function handleSummarize() {
-    if (!text.trim()) {
-      setError("Please paste some academic text first.");
+    if (!text.trim() && !file) {
+      setError("Please paste text or upload a PDF first.");
       return;
     }
 
@@ -64,13 +64,25 @@ export default function ToolPage() {
     setResult(null);
 
     try {
-      const res = await fetch("/api/summarize", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ text }),
-      });
+      let res: Response;
+
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        res = await fetch("/api/summarize", {
+          method: "POST",
+          body: formData,
+        });
+      } else {
+        res = await fetch("/api/summarize", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ text }),
+        });
+      }
 
       const data = await res.json();
 
@@ -89,12 +101,14 @@ export default function ToolPage() {
 
   function handleUseSample() {
     setText(sampleText);
+    setFile(null);
     setResult(null);
     setError("");
   }
 
   function handleClear() {
     setText("");
+    setFile(null);
     setResult(null);
     setError("");
   }
@@ -142,11 +156,21 @@ export default function ToolPage() {
 
         <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <label className="mb-3 block text-sm font-medium text-slate-700">
+              Upload PDF
+            </label>
+            <input
+              type="file"
+              accept=".pdf"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="mb-4 block w-full text-sm"
+            />
+
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Paste academic text here"
-              className="h-[360px] w-full rounded-xl border border-slate-300 p-4 outline-none"
+              className="h-[320px] w-full rounded-xl border border-slate-300 p-4 outline-none"
             />
 
             <div className="mt-4 flex justify-between">
@@ -156,7 +180,7 @@ export default function ToolPage() {
 
               <button
                 onClick={handleSummarize}
-                className="rounded-xl bg-indigo-600 px-6 py-3 text-white"
+                className="rounded-xl bg-indigo-600 px-6 py-3 text-white disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={loading || isLimitReached}
               >
                 {loading
@@ -166,6 +190,12 @@ export default function ToolPage() {
                   : "Summarize"}
               </button>
             </div>
+
+            {file && (
+              <p className="mt-3 text-sm text-slate-600">
+                PDF selected: {file.name}
+              </p>
+            )}
 
             {error && <div className="mt-4 text-red-600">{error}</div>}
           </div>
@@ -180,28 +210,40 @@ export default function ToolPage() {
 
             <div className="rounded-2xl border bg-white p-6 shadow-sm">
               <h3 className="font-semibold">Key Points</h3>
-              {result?.keyPoints?.map((p, i) => (
-                <p key={i}>• {p}</p>
-              ))}
+              {result?.keyPoints?.length ? (
+                result.keyPoints.map((p, i) => <p key={i}>• {p}</p>)
+              ) : (
+                <p className="text-sm text-slate-500">Key points will appear here</p>
+              )}
             </div>
 
             <div className="rounded-2xl border bg-white p-6 shadow-sm">
               <h3 className="font-semibold">Difficult Terms</h3>
-              {result?.difficultTerms?.map((t, i) => (
-                <p key={i}>• {t.term}</p>
-              ))}
+              {result?.difficultTerms?.length ? (
+                result.difficultTerms.map((t, i) => (
+                  <div key={i} className="mb-3">
+                    <p>• {t.term}</p>
+                    <p className="text-sm text-slate-600">EN: {t.explanation_en}</p>
+                    <p className="text-sm text-slate-600">中文: {t.explanation_zh}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-500">Difficult terms will appear here</p>
+              )}
             </div>
 
             <div className="rounded-2xl border bg-white p-6 shadow-sm">
               <h3 className="font-semibold">Chinese Explanation</h3>
-              <p>{result?.translation_zh}</p>
+              <p>{result?.translation_zh || "Chinese explanation will appear here"}</p>
             </div>
 
             <div className="rounded-2xl border bg-white p-6 shadow-sm">
               <h3 className="font-semibold">Study Notes</h3>
-              {result?.studyNotes?.map((n, i) => (
-                <p key={i}>• {n}</p>
-              ))}
+              {result?.studyNotes?.length ? (
+                result.studyNotes.map((n, i) => <p key={i}>• {n}</p>)
+              ) : (
+                <p className="text-sm text-slate-500">Study notes will appear here</p>
+              )}
             </div>
           </div>
         </div>
