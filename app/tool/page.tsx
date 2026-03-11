@@ -71,7 +71,10 @@ const labels = {
     proSoon: "Pro payment coming soon",
     switchLang: "中文",
     pdfParsing: "Parsing PDF...",
-    pdfParseFailed: "PDF parsing failed. Please try another PDF or paste the text directly.",
+    pdfParseFailed:
+      "This PDF could not be read. Please try another PDF or paste the text directly.",
+    pdfTextEmpty:
+      "No readable text was found in this PDF. Please paste the paper text directly.",
     markdownCopied: "Markdown copied",
   },
   zh: {
@@ -116,6 +119,7 @@ const labels = {
     switchLang: "EN",
     pdfParsing: "正在解析 PDF...",
     pdfParseFailed: "PDF 解析失败，请尝试其他 PDF 或直接粘贴文本。",
+    pdfTextEmpty: "这个 PDF 没有检测到可读文字，请直接粘贴论文文本。",
     markdownCopied: "Markdown 已复制",
   },
 };
@@ -129,47 +133,27 @@ function getTodayKey() {
 }
 
 async function extractPDFText(file: File) {
-  try {
-    const pdfjsLib = await import("pdfjs-dist");
+  const pdfjsLib = await import("pdfjs-dist");
 
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-    let fullText = "";
+  let fullText = "";
 
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
 
-      const strings = content.items
-        .map((item: any) => ("str" in item ? item.str : ""))
-        .filter(Boolean);
+    const strings = content.items
+      .map((item: any) => ("str" in item ? item.str : ""))
+      .filter(Boolean);
 
-      fullText += strings.join(" ") + "\n";
-    }
-
-    if (fullText.trim().length > 100) {
-      return fullText;
-    }
-
-    throw new Error("PDF text layer empty");
-  } catch {
-    // OCR fallback
-    const Tesseract = await import("tesseract.js");
-
-    const worker = await Tesseract.createWorker("eng");
-
-    const image = URL.createObjectURL(file);
-
-    const {
-      data: { text },
-    } = await worker.recognize(image);
-
-    await worker.terminate();
-
-    return text;
+    fullText += strings.join(" ") + "\n";
   }
+
+  return fullText;
 }
+
 export default function ToolPage() {
   const [lang, setLang] = useState<"en" | "zh">("en");
   const [text, setText] = useState("");
@@ -212,13 +196,21 @@ export default function ToolPage() {
     setFile(selectedFile);
     setError("");
     setCopied("");
+    setResult(null);
 
     try {
       setLoading(true);
+
       const extractedText = await extractPDFText(selectedFile);
+
+      if (!extractedText || extractedText.trim().length < 50) {
+        throw new Error("PDF text empty");
+      }
+
       setText(extractedText);
     } catch {
-      setError(t.pdfParseFailed);
+      setText("");
+      setError(t.pdfTextEmpty);
     } finally {
       setLoading(false);
     }
