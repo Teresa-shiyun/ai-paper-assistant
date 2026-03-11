@@ -6,9 +6,10 @@ export default function TranslatePage() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState("");
+  const [translation, setTranslation] = useState("");
+  const [pdfUrl, setPdfUrl] = useState("");
 
-  const handleUpload = async () => {
+  const handleTranslate = async () => {
     if (!file) {
       setError("请先选择 PDF");
       return;
@@ -17,20 +18,20 @@ export default function TranslatePage() {
     try {
       setLoading(true);
       setError("");
-      setResult("");
+      setTranslation("");
 
-      // 1 获取上传 URL
+      // 获取上传 URL
       const presignRes = await fetch("/api/upload-url", {
         method: "POST",
       });
 
       if (!presignRes.ok) {
-        throw new Error("Failed to get upload url");
+        throw new Error("获取上传地址失败");
       }
 
       const { uploadUrl, key } = await presignRes.json();
 
-      // 2 上传 PDF 到 R2
+      // 上传到 R2
       const uploadRes = await fetch(uploadUrl, {
         method: "PUT",
         headers: {
@@ -42,10 +43,10 @@ export default function TranslatePage() {
 
       if (!uploadRes.ok) {
         const text = await uploadRes.text();
-        throw new Error(text || "Upload failed");
+        throw new Error(text || "上传失败");
       }
 
-      // 3 调用翻译 API
+      // 调用翻译
       const translateRes = await fetch("/api/translate-pdf", {
         method: "POST",
         headers: {
@@ -59,74 +60,123 @@ export default function TranslatePage() {
 
       if (!translateRes.ok) {
         const text = await translateRes.text();
-        throw new Error(text || "Translate failed");
+        throw new Error(text || "翻译失败");
       }
 
       const data = await translateRes.json();
 
-      setResult(data.text || "翻译完成");
+      setTranslation(data.text || "");
+      setPdfUrl(URL.createObjectURL(file));
     } catch (err: any) {
-      console.error("Upload/translate error:", err);
-      setError(err?.message || "Something went wrong");
+      console.error(err);
+      setError(err?.message || "发生错误");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ padding: 40 }}>
-      <h2>上传 PDF</h2>
+    <div style={{ padding: "40px", maxWidth: "1200px", margin: "0 auto" }}>
+      <h1 style={{ fontSize: "28px", marginBottom: "20px" }}>
+        AI Paper Translator
+      </h1>
 
-      <input
-        type="file"
-        accept="application/pdf"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) setFile(f);
-        }}
-      />
-
-      {file && (
-        <p>
-          已选择 PDF: <b>{file.name}</b>
-        </p>
-      )}
-
-      <button
-        onClick={handleUpload}
-        disabled={loading}
+      {/* 上传区域 */}
+      <div
         style={{
-          marginTop: 20,
-          padding: "12px 24px",
-          background: "#5b4bff",
-          color: "white",
-          border: "none",
-          borderRadius: 8,
-          cursor: "pointer",
+          padding: "20px",
+          border: "1px solid #eee",
+          borderRadius: "10px",
+          marginBottom: "20px",
         }}
       >
-        {loading ? "翻译中..." : "开始翻译"}
-      </button>
+        <h3>上传 PDF</h3>
 
-      {error && (
-        <p style={{ color: "red", marginTop: 20 }}>
-          {error}
-        </p>
-      )}
+        <input
+          type="file"
+          accept="application/pdf"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) setFile(f);
+          }}
+        />
 
-      {result && (
-        <div style={{ marginTop: 30 }}>
-          <h3>翻译结果</h3>
-          <pre
+        {file && (
+          <p style={{ marginTop: "10px" }}>
+            已选择 PDF: <b>{file.name}</b>
+          </p>
+        )}
+
+        <button
+          onClick={handleTranslate}
+          disabled={loading}
+          style={{
+            marginTop: "20px",
+            padding: "12px 30px",
+            borderRadius: "8px",
+            background: "#5b4bff",
+            color: "white",
+            border: "none",
+            cursor: "pointer",
+            fontSize: "16px",
+          }}
+        >
+          {loading ? "翻译中..." : "开始翻译"}
+        </button>
+
+        {error && (
+          <p style={{ color: "red", marginTop: "15px" }}>{error}</p>
+        )}
+      </div>
+
+      {/* 结果区域 */}
+      {(pdfUrl || translation) && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "20px",
+          }}
+        >
+          {/* 左边 PDF */}
+          <div
             style={{
-              whiteSpace: "pre-wrap",
-              background: "#f5f5f5",
-              padding: 20,
-              borderRadius: 8,
+              border: "1px solid #eee",
+              borderRadius: "10px",
+              padding: "10px",
+              height: "600px",
             }}
           >
-            {result}
-          </pre>
+            <h3>原始 PDF</h3>
+
+            {pdfUrl && (
+              <iframe
+                src={pdfUrl}
+                style={{
+                  width: "100%",
+                  height: "550px",
+                  border: "none",
+                }}
+              />
+            )}
+          </div>
+
+          {/* 右边翻译 */}
+          <div
+            style={{
+              border: "1px solid #eee",
+              borderRadius: "10px",
+              padding: "20px",
+              height: "600px",
+              overflow: "auto",
+            }}
+          >
+            <h3>翻译结果</h3>
+
+            <div style={{ whiteSpace: "pre-wrap", lineHeight: "1.6" }}>
+              {translation || "翻译结果会显示在这里"}
+            </div>
+          </div>
         </div>
       )}
     </div>
