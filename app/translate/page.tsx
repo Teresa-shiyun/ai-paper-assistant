@@ -118,21 +118,41 @@ export default function TranslatePage() {
       setResult(null);
       setCurrentPage(1);
 
-      const form = new FormData();
-      form.append("file", file);
-
-      const uploadRes = await fetch("/api/upload", {
+      const signRes = await fetch("/api/r2-upload-url", {
         method: "POST",
-        body: form,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type || "application/pdf",
+        }),
       });
 
-      const uploadData = await uploadRes.json();
+      const signData = await signRes.json();
 
-      if (!uploadRes.ok) {
-        throw new Error(uploadData.error || "Upload failed");
+      if (!signRes.ok) {
+        throw new Error(signData.error || "Failed to get upload URL");
       }
 
-      const key = uploadData.key as string;
+      const { uploadUrl, key } = signData as {
+        uploadUrl: string;
+        key: string;
+      };
+
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/pdf",
+        },
+        body: file,
+      });
+
+      if (!putRes.ok) {
+        const text = await putRes.text();
+        throw new Error(text || "Upload to storage failed");
+      }
+
       setFileKey(key);
 
       const translateRes = await fetch("/api/translate-pdf", {
@@ -247,7 +267,7 @@ export default function TranslatePage() {
             {loading ? t.processing : t.translate}
           </button>
 
-          {error && <div className="mt-4 text-red-600">{error}</div>}
+          {error && <div className="mt-4 text-red-600 break-all">{error}</div>}
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
@@ -273,7 +293,9 @@ export default function TranslatePage() {
 
               {totalPages > 0 && (
                 <div className="text-sm text-slate-500">
-                  {lang === "zh" ? `${t.page} ${currentPage} / ${totalPages} 页` : `${t.page} ${currentPage} / ${totalPages}`}
+                  {lang === "zh"
+                    ? `${t.page} ${currentPage} / ${totalPages} 页`
+                    : `${t.page} ${currentPage} / ${totalPages}`}
                 </div>
               )}
             </div>
