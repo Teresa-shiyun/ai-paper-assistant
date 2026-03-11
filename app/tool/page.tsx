@@ -13,11 +13,17 @@ type PaperSection = {
   content: string;
 };
 
+type ParallelItem = {
+  en: string;
+  zh: string;
+};
+
 type ResultData = {
   summary: string;
   keyPoints: string[];
   difficultTerms: DifficultTerm[];
   translation_zh: string;
+  parallelTranslation: ParallelItem[];
   studyNotes: string[];
   essayOutline: string[];
   paperSections: PaperSection[];
@@ -32,7 +38,7 @@ const labels = {
   en: {
     title: "AI Paper Assistant",
     subtitle:
-      "Upload PDF or paste academic text to get summary, notes, paper sections, essay outline, and essay draft.",
+      "Upload PDF or paste academic text to get summary, parallel translation, notes, paper sections, essay outline, and essay draft.",
     freeTrial: "Free Trial: 2 AI uses per day",
     remaining: "Remaining today",
     uploadPdf: "Upload PDF",
@@ -49,6 +55,9 @@ const labels = {
     keyPoints: "Key Points",
     difficultTerms: "Difficult Terms",
     chineseExplanation: "Chinese Explanation",
+    parallelTranslation: "Parallel Translation",
+    original: "Original",
+    translated: "Translated",
     studyNotes: "Study Notes",
     essayOutline: "Essay Outline",
     paperSections: "Paper Structure",
@@ -59,6 +68,7 @@ const labels = {
     keyPointsPlaceholder: "Key points will appear here",
     difficultTermsPlaceholder: "Difficult terms will appear here",
     chineseExplanationPlaceholder: "Chinese explanation will appear here",
+    parallelTranslationPlaceholder: "Parallel translation will appear here",
     studyNotesPlaceholder: "Study notes will appear here",
     essayOutlinePlaceholder: "Essay outline will appear here",
     paperSectionsPlaceholder: "Paper section analysis will appear here",
@@ -71,15 +81,13 @@ const labels = {
     proSoon: "Pro payment coming soon",
     switchLang: "中文",
     pdfParsing: "Parsing PDF...",
-    pdfParseFailed:
-      "This PDF could not be read. Please try another PDF or paste the text directly.",
     pdfTextEmpty:
-      "No readable text was found in this PDF. Please paste the paper text directly.",
+      "This PDF has no readable text layer. Please paste the paper text directly.",
     markdownCopied: "Markdown copied",
   },
   zh: {
     title: "AI 论文助手",
-    subtitle: "上传 PDF 或粘贴学术文本，一键生成总结、笔记、论文结构、Essay 大纲和 Essay 草稿。",
+    subtitle: "上传 PDF 或粘贴学术文本，一键生成总结、左右对照翻译、学习笔记、论文结构、Essay 大纲和 Essay 草稿。",
     freeTrial: "免费试用：每天 2 次 AI 使用机会",
     remaining: "今日剩余",
     uploadPdf: "上传 PDF",
@@ -96,6 +104,9 @@ const labels = {
     keyPoints: "关键点",
     difficultTerms: "难词解释",
     chineseExplanation: "中文解释",
+    parallelTranslation: "左右对照翻译",
+    original: "原文",
+    translated: "翻译",
     studyNotes: "学习笔记",
     essayOutline: "Essay 大纲",
     paperSections: "论文结构",
@@ -106,6 +117,7 @@ const labels = {
     keyPointsPlaceholder: "这里会显示关键点",
     difficultTermsPlaceholder: "这里会显示难词解释",
     chineseExplanationPlaceholder: "这里会显示中文解释",
+    parallelTranslationPlaceholder: "这里会显示左右对照翻译",
     studyNotesPlaceholder: "这里会显示学习笔记",
     essayOutlinePlaceholder: "这里会显示 Essay 大纲",
     paperSectionsPlaceholder: "这里会显示论文结构分析",
@@ -118,8 +130,7 @@ const labels = {
     proSoon: "Pro 付费功能即将上线",
     switchLang: "EN",
     pdfParsing: "正在解析 PDF...",
-    pdfParseFailed: "PDF 解析失败，请尝试其他 PDF 或直接粘贴文本。",
-    pdfTextEmpty: "这个 PDF 没有检测到可读文字，请直接粘贴论文文本。",
+    pdfTextEmpty: "这个 PDF 没有检测到可读文字层，请直接粘贴论文文本。",
     markdownCopied: "Markdown 已复制",
   },
 };
@@ -134,7 +145,6 @@ function getTodayKey() {
 
 async function extractPDFText(file: File) {
   const pdfjsLib = await import("pdfjs-dist");
-
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
@@ -167,14 +177,12 @@ export default function ToolPage() {
   const t = labels[lang];
 
   useEffect(() => {
-    const key = getTodayKey();
-    const saved = localStorage.getItem(key);
-    setUsageCount(saved ? Number(saved) : 0);
-
     const savedLang = localStorage.getItem("ui_lang");
-    if (savedLang === "en" || savedLang === "zh") {
-      setLang(savedLang);
-    }
+    if (savedLang === "en" || savedLang === "zh") setLang(savedLang);
+
+    const key = getTodayKey();
+    const savedUsage = localStorage.getItem(key);
+    setUsageCount(savedUsage ? Number(savedUsage) : 0);
   }, []);
 
   function updateUsage(newCount: number) {
@@ -184,9 +192,9 @@ export default function ToolPage() {
   }
 
   function toggleLang() {
-    const nextLang = lang === "en" ? "zh" : "en";
-    setLang(nextLang);
-    localStorage.setItem("ui_lang", nextLang);
+    const next = lang === "en" ? "zh" : "en";
+    setLang(next);
+    localStorage.setItem("ui_lang", next);
   }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -200,7 +208,6 @@ export default function ToolPage() {
 
     try {
       setLoading(true);
-
       const extractedText = await extractPDFText(selectedFile);
 
       if (!extractedText || extractedText.trim().length < 50) {
@@ -293,14 +300,24 @@ export default function ToolPage() {
   function buildMarkdown() {
     if (!result) return "";
 
-    const difficultTermsText =
-      result.difficultTerms?.map(
-        (item) =>
-          `- **${item.term}**\n  - EN: ${item.explanation_en}\n  - 中文: ${item.explanation_zh}`
-      ).join("\n") || "";
-
     const keyPointsText =
       result.keyPoints?.map((item) => `- ${item}`).join("\n") || "";
+
+    const difficultTermsText =
+      result.difficultTerms
+        ?.map(
+          (item) =>
+            `- **${item.term}**\n  - EN: ${item.explanation_en}\n  - 中文: ${item.explanation_zh}`
+        )
+        .join("\n") || "";
+
+    const parallelText =
+      result.parallelTranslation
+        ?.map(
+          (item) =>
+            `### ${t.original}\n${item.en}\n\n### ${t.translated}\n${item.zh}`
+        )
+        .join("\n\n") || "";
 
     const notesText =
       result.studyNotes?.map((item) => `- ${item}`).join("\n") || "";
@@ -309,9 +326,9 @@ export default function ToolPage() {
       result.essayOutline?.map((item) => `- ${item}`).join("\n") || "";
 
     const sectionsText =
-      result.paperSections?.map(
-        (item) => `- **${item.section}**: ${item.content}`
-      ).join("\n") || "";
+      result.paperSections
+        ?.map((item) => `- **${item.section}**: ${item.content}`)
+        .join("\n") || "";
 
     return `# ${t.title}
 
@@ -326,6 +343,9 @@ ${difficultTermsText}
 
 ## ${t.chineseExplanation}
 ${result.translation_zh || ""}
+
+## ${t.parallelTranslation}
+${parallelText}
 
 ## ${t.studyNotes}
 ${notesText}
@@ -362,7 +382,7 @@ ${result.essayDraft || ""}
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
-      <section className="mx-auto max-w-6xl">
+      <section className="mx-auto max-w-7xl">
         <div className="mb-8 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">{t.title}</h1>
@@ -407,56 +427,94 @@ ${result.essayDraft || ""}
           </div>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <label className="mb-3 block text-sm font-medium text-slate-700">
-              {t.uploadPdf}
-            </label>
+        <div className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr]">
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <label className="mb-3 block text-sm font-medium text-slate-700">
+                {t.uploadPdf}
+              </label>
 
-            <input
-              type="file"
-              accept=".pdf"
-              onChange={handleFileChange}
-              className="mb-4 block w-full text-sm"
-            />
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={handleFileChange}
+                className="mb-4 block w-full text-sm"
+              />
 
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={t.pastePlaceholder}
-              className="h-[320px] w-full rounded-xl border border-slate-300 p-4 outline-none focus:border-indigo-500"
-            />
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder={t.pastePlaceholder}
+                className="h-[320px] w-full rounded-xl border border-slate-300 p-4 outline-none focus:border-indigo-500"
+              />
 
-            <div className="mt-4 flex items-center justify-between gap-4">
-              <p className="text-sm text-slate-500">
-                {t.characters}: {text.length}
-              </p>
+              <div className="mt-4 flex items-center justify-between gap-4">
+                <p className="text-sm text-slate-500">
+                  {t.characters}: {text.length}
+                </p>
 
-              <button
-                onClick={handleSummarize}
-                className="rounded-xl bg-indigo-600 px-6 py-3 text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={loading || isLimitReached}
-              >
-                {loading
-                  ? t.working
-                  : isLimitReached
-                  ? t.limitReached
-                  : t.summarize}
-              </button>
+                <button
+                  onClick={handleSummarize}
+                  className="rounded-xl bg-indigo-600 px-6 py-3 text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={loading || isLimitReached}
+                >
+                  {loading
+                    ? t.working
+                    : isLimitReached
+                    ? t.limitReached
+                    : t.summarize}
+                </button>
+              </div>
+
+              {loading && file && (
+                <p className="mt-3 text-sm text-slate-600">{t.pdfParsing}</p>
+              )}
+
+              {file && !loading && (
+                <p className="mt-3 text-sm text-slate-600">
+                  {t.pdfSelected}: {file.name}
+                </p>
+              )}
+
+              {error && <div className="mt-4 text-red-600">{error}</div>}
+              {copied && <div className="mt-4 text-emerald-600">{copied}</div>}
             </div>
 
-            {loading && file && (
-              <p className="mt-3 text-sm text-slate-600">{t.pdfParsing}</p>
-            )}
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="mb-4 text-lg font-semibold text-slate-900">
+                {t.parallelTranslation}
+              </h3>
 
-            {file && !loading && (
-              <p className="mt-3 text-sm text-slate-600">
-                {t.pdfSelected}: {file.name}
-              </p>
-            )}
+              {result?.parallelTranslation?.length ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="mb-3 font-semibold text-slate-900">
+                      {t.original}
+                    </p>
+                    <div className="space-y-3 text-sm leading-7 text-slate-700">
+                      {result.parallelTranslation.map((item, i) => (
+                        <p key={i}>{item.en}</p>
+                      ))}
+                    </div>
+                  </div>
 
-            {error && <div className="mt-4 text-red-600">{error}</div>}
-            {copied && <div className="mt-4 text-emerald-600">{copied}</div>}
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="mb-3 font-semibold text-slate-900">
+                      {t.translated}
+                    </p>
+                    <div className="space-y-3 text-sm leading-7 text-slate-700">
+                      {result.parallelTranslation.map((item, i) => (
+                        <p key={i}>{item.zh}</p>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  {t.parallelTranslationPlaceholder}
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="space-y-5">
