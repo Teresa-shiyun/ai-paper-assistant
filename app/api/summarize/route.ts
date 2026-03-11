@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import pdf from "pdf-parse";
+import * as pdf from "pdf-parse";
 
 const client = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY,
@@ -9,7 +9,6 @@ const client = new OpenAI({
 export async function POST(req: Request) {
   try {
     const contentType = req.headers.get("content-type") || "";
-
     let text = "";
 
     if (contentType.includes("application/json")) {
@@ -32,6 +31,8 @@ export async function POST(req: Request) {
     if (!text || !text.trim()) {
       return Response.json({ error: "Text is required" }, { status: 400 });
     }
+
+    const trimmedText = text.slice(0, 12000);
 
     const completion = await client.chat.completions.create({
       model: "deepseek-chat",
@@ -64,6 +65,12 @@ export async function POST(req: Request) {
     "Revision note 1",
     "Revision note 2",
     "Revision note 3"
+  ],
+  "essayOutline": [
+    "Introduction: ...",
+    "Body Paragraph 1: ...",
+    "Body Paragraph 2: ...",
+    "Conclusion: ..."
   ]
 }
 
@@ -75,10 +82,11 @@ Rules:
 - explanation_zh must be natural Chinese.
 - translation_zh should explain the passage in Chinese naturally.
 - studyNotes should be suitable for revision or exam prep.
+- essayOutline should be suitable for writing an essay based on this text.
 - Return JSON only. No markdown. No extra text.
 
 Text:
-${text.slice(0, 12000)}`,
+${trimmedText}`,
         },
       ],
       temperature: 0.3,
@@ -99,6 +107,7 @@ ${text.slice(0, 12000)}`,
         difficultTerms: [],
         translation_zh: "",
         studyNotes: [],
+        essayOutline: [],
       });
     }
   } catch (error) {
