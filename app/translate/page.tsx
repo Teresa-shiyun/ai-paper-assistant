@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createWorker } from "tesseract.js";
 
 type ParallelItem = {
   en: string;
@@ -34,7 +33,7 @@ const labels = {
     freeTrial: "Free Trial: 2 AI uses per day",
     chars: "Characters",
     pdfSelected: "PDF selected",
-    parsing: "Parsing PDF...",
+    parsing: "Reading PDF with OCR...",
     pdfFailed:
       "This PDF could not be read. Please try another PDF or paste the text directly.",
     noText: "Please paste text or upload a PDF first.",
@@ -61,7 +60,7 @@ const labels = {
     freeTrial: "免费试用：每天 2 次 AI 使用机会",
     chars: "字符数",
     pdfSelected: "已选择 PDF",
-    parsing: "正在解析 PDF...",
+    parsing: "正在用 OCR 读取 PDF...",
     pdfFailed: "这个 PDF 无法读取，请尝试其他 PDF 或直接粘贴文本。",
     noText: "请先粘贴文本或上传 PDF。",
     freeUsed: "今日免费次数已用完，升级 Pro 可无限使用。",
@@ -81,59 +80,6 @@ function getTodayKey() {
   const mm = String(today.getMonth() + 1).padStart(2, "0");
   const dd = String(today.getDate()).padStart(2, "0");
   return `translate_usage_${yyyy}-${mm}-${dd}`;
-}
-
-async function ocrCanvas(canvas: HTMLCanvasElement) {
-  const worker = await createWorker("eng");
-  const {
-    data: { text },
-  } = await worker.recognize(canvas);
-  await worker.terminate();
-  return text;
-}
-
-async function extractPDFText(file: File) {
-  const pdfjsLib = await import("pdfjs-dist");
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
-  let fullText = "";
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-
-    const textContent = await page.getTextContent();
-    const strings = textContent.items
-      .map((item: any) => ("str" in item ? item.str : ""))
-      .filter(Boolean);
-
-    const pageText = strings.join(" ");
-
-    if (pageText.trim().length > 20) {
-      fullText += pageText + "\n\n";
-      continue;
-    }
-
-    const viewport = page.getViewport({ scale: 1.5 });
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d");
-
-    if (!context) continue;
-
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-
-    await page.render({
-      canvas,
-      canvasContext: context,
-      viewport,
-    }).promise;
-
-    const ocrText = await ocrCanvas(canvas);
-    fullText += ocrText + "\n\n";
-  }
-
-  return fullText;
 }
 
 export default function TranslatePage() {
@@ -176,16 +122,32 @@ export default function TranslatePage() {
 
     try {
       setLoading(true);
-      const extracted = await extractPDFText(selectedFile);
 
-      if (!extracted || extracted.trim().length < 50) {
-        throw new Error("PDF parse failed");
+      const form = new FormData();
+      form.append("file", selectedFile);
+
+      const res = await fetch("/api/ocr", {
+        method: "POST",
+        body: form,
+      });
+
+      const raw = await res.text();
+      let data: any;
+
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        throw new Error(raw);
       }
 
-      setText(extracted);
-    } catch {
+      if (!res.ok) {
+        throw new Error(data.error || t.pdfFailed);
+      }
+
+      setText(data.text || "");
+    } catch (err: any) {
       setText("");
-      setError(t.pdfFailed);
+      setError(err.message || t.pdfFailed);
     } finally {
       setLoading(false);
     }
