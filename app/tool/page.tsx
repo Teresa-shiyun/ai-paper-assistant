@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import * as pdfjsLib from "pdfjs-dist";
-import "pdfjs-dist/build/pdf.worker.min.mjs";
 
 type DifficultTerm = {
   term: string;
@@ -131,6 +129,9 @@ function getTodayKey() {
 }
 
 async function extractPDFText(file: File) {
+  const pdfjsLib = await import("pdfjs-dist");
+  await import("pdfjs-dist/build/pdf.worker.min.mjs");
+
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
