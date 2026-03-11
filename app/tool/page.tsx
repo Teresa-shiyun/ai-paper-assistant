@@ -169,6 +169,7 @@ async function extractPDFText(file: File) {
     canvas.height = viewport.height;
 
     await page.render({
+      canvas,
       canvasContext: context,
       viewport,
     }).promise;
@@ -461,11 +462,7 @@ ${result.essayDraft || ""}
               disabled={loading || isLimitReached}
               className="rounded-xl bg-indigo-600 px-6 py-3 text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading
-                ? t.working
-                : isLimitReached
-                ? t.freeUsed
-                : t.summarize}
+              {loading ? t.working : isLimitReached ? t.freeUsed : t.summarize}
             </button>
           </div>
 
