@@ -34,7 +34,11 @@ export async function GET(req: Request, context: any) {
       return new Response("File not found", { status: 404 });
     }
 
-    return new Response(bytes, {
+    const blob = new Blob([bytes], {
+      type: result.ContentType || "application/pdf",
+    });
+
+    return new Response(blob, {
       status: 200,
       headers: {
         "Content-Type": result.ContentType || "application/pdf",
