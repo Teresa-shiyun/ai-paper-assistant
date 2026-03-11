@@ -1,11 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import * as pdfjsLib from "pdfjs-dist";
+import "pdfjs-dist/build/pdf.worker.min.mjs";
 
 type DifficultTerm = {
   term: string;
   explanation_en: string;
   explanation_zh: string;
+};
+
+type PaperSection = {
+  section: string;
+  content: string;
 };
 
 type ResultData = {
@@ -15,6 +22,8 @@ type ResultData = {
   translation_zh: string;
   studyNotes: string[];
   essayOutline: string[];
+  paperSections: PaperSection[];
+  essayDraft: string;
 };
 
 const sampleText = `Artificial intelligence is transforming education by helping students analyze complex academic papers more efficiently. Many international students struggle with dense academic language and unfamiliar terminology when reading research papers. AI-powered summarization tools can automatically extract key ideas, highlight important concepts, and provide simplified explanations of difficult terms. By using these tools, students can save time, improve comprehension, and focus on understanding the most important contributions of a research paper.`;
@@ -25,7 +34,7 @@ const labels = {
   en: {
     title: "AI Paper Assistant",
     subtitle:
-      "Upload PDF or paste academic text to get summary, notes, and essay outline.",
+      "Upload PDF or paste academic text to get summary, notes, paper sections, essay outline, and essay draft.",
     freeTrial: "Free Trial: 2 AI uses per day",
     remaining: "Remaining today",
     uploadPdf: "Upload PDF",
@@ -44,6 +53,9 @@ const labels = {
     chineseExplanation: "Chinese Explanation",
     studyNotes: "Study Notes",
     essayOutline: "Essay Outline",
+    paperSections: "Paper Structure",
+    essayDraft: "Essay Draft",
+    exportMarkdown: "Copy All as Markdown",
     copy: "Copy",
     summaryPlaceholder: "Your summary will appear here",
     keyPointsPlaceholder: "Key points will appear here",
@@ -51,6 +63,8 @@ const labels = {
     chineseExplanationPlaceholder: "Chinese explanation will appear here",
     studyNotesPlaceholder: "Study notes will appear here",
     essayOutlinePlaceholder: "Essay outline will appear here",
+    paperSectionsPlaceholder: "Paper section analysis will appear here",
+    essayDraftPlaceholder: "Essay draft will appear here",
     pasteOrUpload: "Please paste text or upload a PDF first.",
     freeUsed: "Free trial used. Upgrade to Pro for unlimited access.",
     invalidResponse: "Server returned an invalid response. Please try again.",
@@ -58,10 +72,13 @@ const labels = {
     copied: "copied",
     proSoon: "Pro payment coming soon",
     switchLang: "中文",
+    pdfParsing: "Parsing PDF...",
+    pdfParseFailed: "PDF parsing failed. Please try another PDF or paste the text directly.",
+    markdownCopied: "Markdown copied",
   },
   zh: {
     title: "AI 论文助手",
-    subtitle: "上传 PDF 或粘贴学术文本，一键生成总结、笔记和论文大纲。",
+    subtitle: "上传 PDF 或粘贴学术文本，一键生成总结、笔记、论文结构、Essay 大纲和 Essay 草稿。",
     freeTrial: "免费试用：每天 2 次 AI 使用机会",
     remaining: "今日剩余",
     uploadPdf: "上传 PDF",
@@ -80,6 +97,9 @@ const labels = {
     chineseExplanation: "中文解释",
     studyNotes: "学习笔记",
     essayOutline: "Essay 大纲",
+    paperSections: "论文结构",
+    essayDraft: "Essay 草稿",
+    exportMarkdown: "复制全部 Markdown",
     copy: "复制",
     summaryPlaceholder: "这里会显示总结内容",
     keyPointsPlaceholder: "这里会显示关键点",
@@ -87,6 +107,8 @@ const labels = {
     chineseExplanationPlaceholder: "这里会显示中文解释",
     studyNotesPlaceholder: "这里会显示学习笔记",
     essayOutlinePlaceholder: "这里会显示 Essay 大纲",
+    paperSectionsPlaceholder: "这里会显示论文结构分析",
+    essayDraftPlaceholder: "这里会显示 Essay 草稿",
     pasteOrUpload: "请先粘贴文本或上传 PDF。",
     freeUsed: "今日免费次数已用完，升级 Pro 可无限使用。",
     invalidResponse: "服务器返回异常，请稍后再试。",
@@ -94,6 +116,9 @@ const labels = {
     copied: "已复制",
     proSoon: "Pro 付费功能即将上线",
     switchLang: "EN",
+    pdfParsing: "正在解析 PDF...",
+    pdfParseFailed: "PDF 解析失败，请尝试其他 PDF 或直接粘贴文本。",
+    markdownCopied: "Markdown 已复制",
   },
 };
 
@@ -103,6 +128,26 @@ function getTodayKey() {
   const mm = String(today.getMonth() + 1).padStart(2, "0");
   const dd = String(today.getDate()).padStart(2, "0");
   return `usage_${yyyy}-${mm}-${dd}`;
+}
+
+async function extractPDFText(file: File) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  let fullText = "";
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+
+    const strings = content.items
+      .map((item: any) => ("str" in item ? item.str : ""))
+      .filter(Boolean);
+
+    fullText += strings.join(" ") + "\n";
+  }
+
+  return fullText;
 }
 
 export default function ToolPage() {
@@ -140,8 +185,27 @@ export default function ToolPage() {
     localStorage.setItem("ui_lang", nextLang);
   }
 
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFile = e.target.files?.[0] || null;
+    if (!selectedFile) return;
+
+    setFile(selectedFile);
+    setError("");
+    setCopied("");
+
+    try {
+      setLoading(true);
+      const extractedText = await extractPDFText(selectedFile);
+      setText(extractedText);
+    } catch {
+      setError(t.pdfParseFailed);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleSummarize() {
-    if (!text.trim() && !file) {
+    if (!text.trim()) {
       setError(t.pasteOrUpload);
       return;
     }
@@ -157,25 +221,13 @@ export default function ToolPage() {
     setCopied("");
 
     try {
-      let res: Response;
-
-      if (file) {
-        const formData = new FormData();
-        formData.append("file", file);
-
-        res = await fetch("/api/summarize", {
-          method: "POST",
-          body: formData,
-        });
-      } else {
-        res = await fetch("/api/summarize", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ text }),
-        });
-      }
+      const res = await fetch("/api/summarize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text }),
+      });
 
       const raw = await res.text();
 
@@ -226,12 +278,75 @@ export default function ToolPage() {
     }
   }
 
+  function buildMarkdown() {
+    if (!result) return "";
+
+    const difficultTermsText =
+      result.difficultTerms?.map(
+        (item) =>
+          `- **${item.term}**\n  - EN: ${item.explanation_en}\n  - 中文: ${item.explanation_zh}`
+      ).join("\n") || "";
+
+    const keyPointsText =
+      result.keyPoints?.map((item) => `- ${item}`).join("\n") || "";
+
+    const notesText =
+      result.studyNotes?.map((item) => `- ${item}`).join("\n") || "";
+
+    const outlineText =
+      result.essayOutline?.map((item) => `- ${item}`).join("\n") || "";
+
+    const sectionsText =
+      result.paperSections?.map(
+        (item) => `- **${item.section}**: ${item.content}`
+      ).join("\n") || "";
+
+    return `# ${t.title}
+
+## ${t.summary}
+${result.summary || ""}
+
+## ${t.keyPoints}
+${keyPointsText}
+
+## ${t.difficultTerms}
+${difficultTermsText}
+
+## ${t.chineseExplanation}
+${result.translation_zh || ""}
+
+## ${t.studyNotes}
+${notesText}
+
+## ${t.essayOutline}
+${outlineText}
+
+## ${t.paperSections}
+${sectionsText}
+
+## ${t.essayDraft}
+${result.essayDraft || ""}
+`;
+  }
+
+  async function copyMarkdown() {
+    try {
+      await navigator.clipboard.writeText(buildMarkdown());
+      setCopied(t.markdownCopied);
+      setTimeout(() => setCopied(""), 2000);
+    } catch {
+      setCopied(t.copyFailed);
+      setTimeout(() => setCopied(""), 2000);
+    }
+  }
+
   const remaining = Math.max(0, DAILY_LIMIT - usageCount);
   const isLimitReached = usageCount >= DAILY_LIMIT;
 
   const summaryText = result?.summary || "";
   const notesText = result?.studyNotes?.join("\n") || "";
   const outlineText = result?.essayOutline?.join("\n") || "";
+  const draftText = result?.essayDraft || "";
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
@@ -265,6 +380,13 @@ export default function ToolPage() {
               {t.clear}
             </button>
             <button
+              onClick={copyMarkdown}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+              disabled={!result}
+            >
+              {t.exportMarkdown}
+            </button>
+            <button
               className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800"
               onClick={() => alert(t.proSoon)}
             >
@@ -282,7 +404,7 @@ export default function ToolPage() {
             <input
               type="file"
               accept=".pdf"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              onChange={handleFileChange}
               className="mb-4 block w-full text-sm"
             />
 
@@ -311,7 +433,11 @@ export default function ToolPage() {
               </button>
             </div>
 
-            {file && (
+            {loading && file && (
+              <p className="mt-3 text-sm text-slate-600">{t.pdfParsing}</p>
+            )}
+
+            {file && !loading && (
               <p className="mt-3 text-sm text-slate-600">
                 {t.pdfSelected}: {file.name}
               </p>
@@ -355,14 +481,14 @@ export default function ToolPage() {
               <h3 className="mb-3 font-semibold text-slate-900">{t.difficultTerms}</h3>
               {result?.difficultTerms?.length ? (
                 <div className="space-y-3">
-                  {result.difficultTerms.map((tItem, i) => (
+                  {result.difficultTerms.map((item, i) => (
                     <div key={i} className="rounded-xl bg-slate-50 p-3">
-                      <p className="font-semibold text-slate-900">{tItem.term}</p>
+                      <p className="font-semibold text-slate-900">{item.term}</p>
                       <p className="mt-1 text-sm text-slate-700">
-                        EN: {tItem.explanation_en}
+                        EN: {item.explanation_en}
                       </p>
                       <p className="mt-1 text-sm text-slate-700">
-                        中文: {tItem.explanation_zh}
+                        中文: {item.explanation_zh}
                       </p>
                     </div>
                   ))}
@@ -423,6 +549,38 @@ export default function ToolPage() {
               ) : (
                 <p className="text-sm text-slate-500">{t.essayOutlinePlaceholder}</p>
               )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="mb-3 font-semibold text-slate-900">{t.paperSections}</h3>
+              {result?.paperSections?.length ? (
+                <div className="space-y-3">
+                  {result.paperSections.map((item, i) => (
+                    <div key={i} className="rounded-xl bg-slate-50 p-3">
+                      <p className="font-semibold text-slate-900">{item.section}</p>
+                      <p className="mt-1 text-sm text-slate-700">{item.content}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">{t.paperSectionsPlaceholder}</p>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="font-semibold text-slate-900">{t.essayDraft}</h3>
+                <button
+                  onClick={() => copyText(t.essayDraft, draftText)}
+                  className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
+                  disabled={!draftText}
+                >
+                  {t.copy}
+                </button>
+              </div>
+              <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">
+                {result?.essayDraft || t.essayDraftPlaceholder}
+              </p>
             </div>
           </div>
         </div>

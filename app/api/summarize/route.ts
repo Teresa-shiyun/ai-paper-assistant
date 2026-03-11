@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import { PDFParse } from "pdf-parse";
 
 export const runtime = "nodejs";
 
@@ -10,45 +9,14 @@ const client = new OpenAI({
 
 export async function POST(req: Request) {
   try {
-    const contentType = req.headers.get("content-type") || "";
-    let text = "";
-
-    if (contentType.includes("application/json")) {
-      const body = await req.json();
-      text = body?.text || "";
-    } else if (contentType.includes("multipart/form-data")) {
-      const formData = await req.formData();
-      const file = formData.get("file") as File | null;
-
-      if (!file) {
-        return Response.json({ error: "PDF file is required" }, { status: 400 });
-      }
-
-      const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-
-      try {
-        const parser = new PDFParse({ data: buffer });
-        const parsedPdf = await parser.getText();
-        text = parsedPdf.text || "";
-        await parser.destroy();
-      } catch (pdfError) {
-        console.error("PDF parse error:", pdfError);
-        return Response.json(
-          {
-            error:
-              "This PDF could not be parsed. Please try a text-based PDF or paste the text directly.",
-          },
-          { status: 400 }
-        );
-      }
-    }
+    const body = await req.json();
+    const text = body?.text || "";
 
     if (!text || !text.trim()) {
       return Response.json({ error: "Text is required" }, { status: 400 });
     }
 
-    const trimmedText = text.slice(0, 12000);
+    const trimmedText = text.slice(0, 16000);
 
     const completion = await client.chat.completions.create({
       model: "deepseek-chat",
@@ -87,7 +55,26 @@ export async function POST(req: Request) {
     "Body Paragraph 1: ...",
     "Body Paragraph 2: ...",
     "Conclusion: ..."
-  ]
+  ],
+  "paperSections": [
+    {
+      "section": "Abstract",
+      "content": "summary of this section"
+    },
+    {
+      "section": "Method",
+      "content": "summary of this section"
+    },
+    {
+      "section": "Results",
+      "content": "summary of this section"
+    },
+    {
+      "section": "Conclusion",
+      "content": "summary of this section"
+    }
+  ],
+  "essayDraft": "Write an approximately 800-1000 word academic draft based on the content."
 }
 
 Rules:
@@ -99,6 +86,8 @@ Rules:
 - translation_zh should explain the passage in Chinese naturally.
 - studyNotes should be suitable for revision or exam prep.
 - essayOutline should be suitable for writing an essay based on this text.
+- paperSections should identify likely academic sections if possible.
+- essayDraft should be a coherent English draft, approximately 800-1000 words when the source has enough content.
 - Return JSON only. No markdown. No extra text.
 
 Text:
@@ -124,6 +113,8 @@ ${trimmedText}`,
         translation_zh: "",
         studyNotes: [],
         essayOutline: [],
+        paperSections: [],
+        essayDraft: "",
       });
     }
   } catch (error) {
