@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import pdf from "pdf-parse";
 
 const client = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY,
@@ -7,7 +8,26 @@ const client = new OpenAI({
 
 export async function POST(req: Request) {
   try {
-    const { text } = await req.json();
+    const contentType = req.headers.get("content-type") || "";
+
+    let text = "";
+
+    if (contentType.includes("application/json")) {
+      const body = await req.json();
+      text = body?.text || "";
+    } else if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      const file = formData.get("file") as File | null;
+
+      if (!file) {
+        return Response.json({ error: "PDF file is required" }, { status: 400 });
+      }
+
+      const bytes = await file.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      const parsedPdf = await pdf(buffer);
+      text = parsedPdf.text || "";
+    }
 
     if (!text || !text.trim()) {
       return Response.json({ error: "Text is required" }, { status: 400 });
@@ -58,14 +78,13 @@ Rules:
 - Return JSON only. No markdown. No extra text.
 
 Text:
-${text}`,
+${text.slice(0, 12000)}`,
         },
       ],
       temperature: 0.3,
     });
 
     let content = completion.choices[0]?.message?.content || "";
-
     content = content.replace(/```json/g, "");
     content = content.replace(/```/g, "");
     content = content.trim();
@@ -84,12 +103,6 @@ ${text}`,
     }
   } catch (error) {
     console.error("API error:", error);
-
-    return Response.json(
-      {
-        error: "AI error occurred",
-      },
-      { status: 500 }
-    );
+    return Response.json({ error: "AI error occurred" }, { status: 500 });
   }
 }
