@@ -18,10 +18,8 @@ const DAILY_LIMIT = 2;
 const labels = {
   en: {
     title: "AI PDF Translator",
-    subtitle:
-      "Upload PDF or paste academic text to get side-by-side translation.",
+    subtitle: "Upload PDF or paste academic text to get side-by-side translation.",
     uploadPdf: "Upload PDF",
-    placeholder: "Paste academic text here",
     translate: "Translate",
     working: "AI working...",
     useSample: "Use Sample",
@@ -36,9 +34,6 @@ const labels = {
     invalid: "Server returned an invalid response. Please try again.",
     original: "Original PDF",
     translated: "Translated",
-    summaryZh: "Chinese Summary",
-    keywords: "Keywords",
-    summaryPlaceholder: "Chinese summary will appear here",
     parallelPlaceholder: "Parallel translation will appear here",
     page: "Page",
     prev: "Previous",
@@ -48,7 +43,6 @@ const labels = {
     title: "AI 文档翻译",
     subtitle: "上传 PDF，获得左右对照翻译。",
     uploadPdf: "上传 PDF",
-    placeholder: "请在这里粘贴学术文本",
     translate: "开始翻译",
     working: "AI 正在处理中...",
     useSample: "使用示例",
@@ -63,9 +57,6 @@ const labels = {
     invalid: "服务器返回异常，请稍后再试。",
     original: "原始 PDF",
     translated: "翻译",
-    summaryZh: "中文总结",
-    keywords: "关键词",
-    summaryPlaceholder: "这里会显示中文总结",
     parallelPlaceholder: "这里会显示左右对照翻译",
     page: "第",
     prev: "上一页",
@@ -140,22 +131,26 @@ export default function TranslatePage() {
       });
 
       const signRaw = await signRes.text();
-      let signData: any;
+      console.log("r2-upload-url raw:", signRaw);
 
+      let signData: any;
       try {
         signData = JSON.parse(signRaw);
       } catch {
-        throw new Error(t.invalid);
+        throw new Error(`获取上传地址失败：${signRaw || "返回不是 JSON"}`);
       }
 
       if (!signRes.ok) {
-        throw new Error(signData.error || "Failed to get upload URL");
+        throw new Error(signData.error || "获取上传地址失败");
       }
 
       const { uploadUrl, key } = signData as {
         uploadUrl: string;
         key: string;
       };
+
+      console.log("uploadUrl:", uploadUrl);
+      console.log("key:", key);
 
       const putRes = await fetch(uploadUrl, {
         method: "PUT",
@@ -167,8 +162,9 @@ export default function TranslatePage() {
       });
 
       if (!putRes.ok) {
-        const text = await putRes.text();
-        throw new Error(text || "Upload to storage failed");
+        const putText = await putRes.text();
+        console.log("R2 PUT failed:", putText);
+        throw new Error(`上传到 R2 失败：${putText || putRes.status}`);
       }
 
       setFileKey(key);
@@ -182,23 +178,24 @@ export default function TranslatePage() {
       });
 
       const translateRaw = await translateRes.text();
-      let translateData: any;
+      console.log("translate-pdf raw:", translateRaw);
 
+      let translateData: any;
       try {
         translateData = JSON.parse(translateRaw);
       } catch {
-        throw new Error(t.invalid);
+        throw new Error(`翻译接口返回异常：${translateRaw || "返回不是 JSON"}`);
       }
 
       if (!translateRes.ok) {
-        throw new Error(translateData.error || "Translation failed");
+        throw new Error(translateData.error || "翻译失败");
       }
 
       setResult(translateData);
       updateUsage(usageCount + 1);
     } catch (err: any) {
       console.error("Upload/translate error:", err);
-      setError(err?.message || "Something went wrong");
+      setError(err?.message || "发生错误");
     } finally {
       setLoading(false);
     }
@@ -368,7 +365,7 @@ export default function TranslatePage() {
 
             <div className="border-t border-slate-200 pt-6">
               <h4 className="mb-3 font-semibold text-slate-900">
-                {t.original === "原始 PDF" ? "提取文本" : "Extracted Text"}
+                {lang === "zh" ? "提取文本" : "Extracted Text"}
               </h4>
               <div className="max-h-[280px] overflow-auto rounded-xl bg-slate-50 p-4 text-sm leading-7 text-slate-700">
                 {currentItem?.original || ""}
