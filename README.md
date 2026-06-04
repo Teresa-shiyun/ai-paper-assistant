@@ -82,7 +82,7 @@ If these variables are not set, the frontend still opens, but the related API ro
 
 ## Screenshots / Results Preview
 
-TODO: add screenshots for the landing page, summariser output and PDF translation view.
+![AI Paper Assistant landing page](docs/assets/ai-paper-assistant-home.png)
 
 ## Future Improvements / 后续改进
 
